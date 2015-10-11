@@ -13,3 +13,6 @@ dist/
 
 # Log
 *.log
+
+# Mac
+.DS_Store
