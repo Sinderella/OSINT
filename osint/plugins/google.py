@@ -13,10 +13,15 @@ class Google(base.SourceBase):
         base.SourceBase.__init__(self)
         self.web_requester = Requester()
         self.url = 'https://www.google.com/search?q={}'
-        self.query = None
+        self._query = None
 
-    def set_query(self, query):
-        self.query = query
+    @property
+    def query(self):
+        return self._query
+
+    @query.setter
+    def query(self, query):
+        self._query = query
 
     def get_result(self):
         result = Result('Google')
@@ -32,5 +37,5 @@ class Google(base.SourceBase):
 
 if __name__ == '__main__':
     g = Google()
-    g.set_query('"halloween@windowslive.com"')
+    g.query = '"halloween@windowslive.com"'
     print g.get_result()
