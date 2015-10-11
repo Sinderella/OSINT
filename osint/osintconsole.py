@@ -19,7 +19,6 @@ class Console(cmd.Cmd):
         self.INPUT_PARAMS = ['FIRST_NAME', 'LAST_NAME', 'EMAIL', 'FACEBOOK']
         self.SHOW_PARAMS = ['params', 'options', 'info']
         self.params = dict()
-        self.params['EMAIL'] = 'halloween@windowslive.com'
 
     def __set_check_func(self, plugin_name):
         self.dispatch_extension = plugin_name
