@@ -9,7 +9,7 @@ def main():
     try:
         Console().cmdloop()
     except KeyboardInterrupt:
-        pass
+        print("Quitting...")
 
 
 if __name__ == '__main__':
