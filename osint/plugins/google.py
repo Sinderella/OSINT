@@ -33,9 +33,3 @@ class Google(base.SourceBase):
         links = [x['href'] for x in soup.select('.srg .rc .r a[onmousedown]')]
         result.add_urls(links)
         return result
-
-
-if __name__ == '__main__':
-    g = Google()
-    g.query = '"halloween@windowslive.com"'
-    print g.get_result()
