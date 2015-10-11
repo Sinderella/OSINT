@@ -1,8 +1,8 @@
 class Result(object):
     def __init__(self, source_name=None):
-        self.source_name = source_name
-        self.result = dict()
-        self.result['source_name'] = self.source_name
+        self._source_name = source_name
+        self._result = dict()
+        self._result['source_name'] = self._source_name
 
     def set_source_name(self, source_name):
         self.source_name = source_name
@@ -19,6 +19,14 @@ class Result(object):
             self.result['urls'] += urls
         else:
             self.result['urls'] = urls
+
+    @property
+    def source_name(self):
+        return self._source_name
+
+    @property
+    def result(self):
+        return self._result
 
     def print_result(self):
         if self.source_name is None:
