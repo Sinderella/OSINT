@@ -13,10 +13,15 @@ class Bing(base.SourceBase):
         base.SourceBase.__init__(self)
         self.web_requester = Requester()
         self.url = 'https://www.bing.com/search?q={}'
-        self.query = None
+        self._query = None
 
-    def set_query(self, query):
-        self.query = query
+    @property
+    def query(self):
+        return self._query
+
+    @query.setter
+    def query(self, query):
+        self._query = query
 
     def get_result(self):
         result = Result('Bing')
