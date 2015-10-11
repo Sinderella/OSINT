@@ -1,1 +1,1 @@
-# OSINT
+# OSINT [![Build Status](https://travis-ci.org/Sinderella/OSINT.svg?branch=master)](https://travis-ci.org/Sinderella/OSINT) [![Code Climate](https://codeclimate.com/github/Sinderella/OSINT/badges/gpa.svg)](https://codeclimate.com/github/Sinderella/OSINT) [![Test Coverage](https://codeclimate.com/github/Sinderella/OSINT/badges/coverage.svg)](https://codeclimate.com/github/Sinderella/OSINT/coverage)
