@@ -1,0 +1,15 @@
+# Pycharm
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build
+build/
+dist/
+*.egg-info
+
+# Log
+*.log
