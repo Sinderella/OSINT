@@ -20,9 +20,6 @@ class Console(cmd.Cmd):
         self.SHOW_PARAMS = ['params', 'options', 'info']
         self.params = dict()
 
-    def __set_check_func(self, plugin_name):
-        self.dispatch_extension = plugin_name
-
     def do_reload(self, params):
         del self.mgr
         self.mgr = dispatch.DispatchExtensionManager(
