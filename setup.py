@@ -30,5 +30,5 @@ setup(
         ],
     },
 
-    zip_safe=False, requires=['logbook', 'requests', 'six', 'stevedore']
+    zip_safe=False,
 )
