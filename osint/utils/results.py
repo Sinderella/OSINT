@@ -4,29 +4,33 @@ class Result(object):
         self._result = dict()
         self._result['source_name'] = self._source_name
 
+    @property
+    def source_name(self):
+        return self._source_name
+
+    @source_name.setter
+    def source_name(self, source_name):
+        self._source_name = source_name
+
+    @property
+    def result(self):
+        return self._result
+
     def set_source_name(self, source_name):
         self.source_name = source_name
         self.result['source_name'] = self.source_name
 
     def add_url(self, url):
-        if self.result in 'urls':
-            self.result['urls'].append(url)
-        else:
+        if 'urls' not in self.result:
             self.result['urls'] = [url, ]
+            return
+        self.result['urls'].append(url)
 
     def add_urls(self, urls):
-        if self.result in urls:
+        if 'urls' in self.result:
             self.result['urls'] += urls
         else:
             self.result['urls'] = urls
-
-    @property
-    def source_name(self):
-        return self._source_name
-
-    @property
-    def result(self):
-        return self._result
 
     def print_result(self):
         if self.source_name is None:
