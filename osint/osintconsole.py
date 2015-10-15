@@ -30,18 +30,34 @@ class Console(cmd.Cmd):
         print(self.intro)
 
     def do_run(self, params):
+        """run
+        Gather information from different sources using supplied information.
+        """
         def filter_func(ext, extension_name, *args, **kwargs):
             return ext.name == extension_name
 
         def query_source(ext, extension_name, data, *args, **kwargs):
-            ext.obj.set_query(data)
+            ext.obj.query = data
             return ext.obj.get_result()
 
         results = list()
-        result = self.mgr.map(filter_func, query_source, 'google', "\"" + self.params['EMAIL'] + "\"")
-        results.append(result)
-        result = self.mgr.map(filter_func, query_source, 'bing', "\"" + self.params['EMAIL'] + "\"")
-        results.append(result)
+        if 'EMAIL' in self.params:
+            if ',' in self.params['EMAIL']:
+                emails = self.params['EMAIL'].split[',']
+            else:
+                emails = [self.params['EMAIL']]
+            for email in emails:
+                result = self.mgr.map(filter_func, query_source, 'google', "\"" + email + "\"")
+                results.append(result)
+                result = self.mgr.map(filter_func, query_source, 'bing', "\"" + email + "\"")
+                results.append(result)
+
+        if 'FIRST_NAME' in self.params and 'LAST_NAME' in self.params:
+            full_name = self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']
+            result = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
+            results.append(result)
+            result = self.mgr.map(filter_func, query_source, 'bing', "\"" + full_name + "\"")
+            results.append(result)
 
         for result in results:
             result[0].print_result()
@@ -59,7 +75,7 @@ class Console(cmd.Cmd):
         #
         key = argv[0]
         if argc > 1:
-            value = argv[1]
+            value = ''.join(argv[1:])
         else:
             value = ""
         if key and key in self.INPUT_PARAMS:
@@ -116,7 +132,7 @@ class Console(cmd.Cmd):
     def __show_info(self):
         pass
 
-    def do_quit(self, line):
+    def do_EOF(self, line):
         return True
 
     def postloop(self):
