@@ -10,9 +10,9 @@ class Google(base.SourceBase):
     """
 
     def __init__(self):
-        base.SourceBase.__init__(self)
+        super(Google, self).__init__()
         self.web_requester = Requester()
-        self.url = 'https://www.google.com/search?q={}'
+        self.url = 'https://www.google.com/search?q={}&start={}'
         self._query = None
 
     @property
@@ -25,11 +25,12 @@ class Google(base.SourceBase):
 
     def get_result(self):
         result = Result('Google')
-        response = self.web_requester.get(self.url.format(self.query))
-        soup = BeautifulSoup(response.content, "html.parser")
-        tmp = soup.select('[style="margin-bottom:23px"]')
-        if len(tmp) > 0 and tmp.text.startswith('No results found'):
-            return result
-        links = [x['href'] for x in soup.select('.srg .rc .r a[onmousedown]')]
-        result.add_urls(links)
+        for n in range(0, 50, 10):
+            response = self.web_requester.get(self.url.format(self.query, n))
+            soup = BeautifulSoup(response.content, "html.parser")
+            tmp = soup.select('#res')
+            if len(tmp) == 0:
+                break
+            links = [x['href'] for x in soup.select('.srg .rc .r a[onmousedown]')]
+            result.add_urls(links)
         return result

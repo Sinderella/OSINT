@@ -10,7 +10,7 @@ class Bing(base.SourceBase):
     """
 
     def __init__(self):
-        base.SourceBase.__init__(self)
+        super(Bing, self).__init__()
         self.web_requester = Requester()
         self.url = 'https://www.bing.com/search?q={}'
         self._query = None
