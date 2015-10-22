@@ -26,7 +26,8 @@ setup(
     entry_points={
         'osint.plugins.source': [
             'google = osint.plugins.google:Google',
-            'bing = osint.plugins.bing:Bing'
+            'bing = osint.plugins.bing:Bing',
+            'pipl = osint.plugins.pipl:Pipl'
         ],
     },
 
