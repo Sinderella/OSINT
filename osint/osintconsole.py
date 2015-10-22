@@ -1,7 +1,14 @@
+from Queue import Queue
 import cmd
+import re
+from threading import Thread
 
+from bs4 import BeautifulSoup
+from colorama import Fore
+from requests import ConnectionError
 from stevedore import dispatch
 
+from osint.utils.requesters import Requester
 from utils.parsers import param_parser
 
 
@@ -16,9 +23,54 @@ class Console(cmd.Cmd):
         self.intro = "Loaded " + str(len(self.mgr.extensions)) + " modules"
         self.prompt = "osint$ "
 
-        self.INPUT_PARAMS = ['FIRST_NAME', 'LAST_NAME', 'EMAIL', 'FACEBOOK']
+        self.INPUT_PARAMS = ['FIRST_NAME', 'LAST_NAME', 'EMAIL', 'USERNAME', 'FACEBOOK', 'LINKEDIN']
         self.SHOW_PARAMS = ['params', 'options', 'info']
+        self.queue = Queue()
+        self.results = dict()
         self.params = dict()
+
+        for i in range(3):
+            thread = Thread(target=self.worker)
+            thread.daemon = True
+            thread.start()
+
+    def worker(self):
+        while True:
+            url = self.queue.get()
+            self.extract_info(url)
+            self.queue.task_done()
+
+    def extract_info(self, url):
+        req = Requester()
+        try:
+            res = req.get(url)
+        except ConnectionError:
+            return
+        soup = BeautifulSoup(res.content, 'html.parser')
+        raw_text = soup.get_text(strip=True)
+        if 'email' in self.results:
+            self.results['email'] = self.results['email'].union(self._extract_email(raw_text))
+        else:
+            self.results['email'] = self._extract_email(raw_text)
+
+        if 'phone_no' in self.results:
+            self.results['phone_no'] = self.results['phone_no'].union(self._extract_phone_no(raw_text))
+        else:
+            self.results['phone_no'] = self._extract_phone_no(raw_text)
+
+        # extract using NLP
+
+        for key in self.results:
+            if isinstance(self.results[key], list):
+                self.results[key].sort()
+
+    def _extract_email(self, text):
+        results = re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.(?!PNG|JPG|JS|GIF)[A-Z]{2,}', text, flags=re.IGNORECASE)
+        return set(results)
+
+    def _extract_phone_no(self, text):
+        results = re.findall(r'(\+[0-9]{1,4}\(0\)[0-9\ ]{,8}|0[0-9\ ]{8,12})', text)
+        return set(results)
 
     def do_reload(self, params):
         del self.mgr
@@ -33,6 +85,7 @@ class Console(cmd.Cmd):
         """run
         Gather information from different sources using supplied information.
         """
+
         def filter_func(ext, extension_name, *args, **kwargs):
             return ext.name == extension_name
 
@@ -40,27 +93,41 @@ class Console(cmd.Cmd):
             ext.obj.query = data
             return ext.obj.get_result()
 
-        results = list()
+        self.results.clear()
+
         if 'EMAIL' in self.params:
             if ',' in self.params['EMAIL']:
                 emails = self.params['EMAIL'].split[',']
             else:
                 emails = [self.params['EMAIL']]
             for email in emails:
-                result = self.mgr.map(filter_func, query_source, 'google', "\"" + email + "\"")
-                results.append(result)
-                result = self.mgr.map(filter_func, query_source, 'bing', "\"" + email + "\"")
-                results.append(result)
+                results = self.mgr.map(filter_func, query_source, 'google', "\"" + email + "\"")
+                for result in results:
+                    [self.queue.put(url) for url in result.result['urls']]
+                    # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + email + "\"")
+                    # for result in results:
+                    #     [self.queue.put(url) for url in result.result['urls']]
 
         if 'FIRST_NAME' in self.params and 'LAST_NAME' in self.params:
             full_name = self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']
-            result = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
-            results.append(result)
-            result = self.mgr.map(filter_func, query_source, 'bing', "\"" + full_name + "\"")
-            results.append(result)
-
-        for result in results:
-            result[0].print_result()
+            results = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
+            for result in results:
+                [self.queue.put(url) for url in result.result['urls']]
+            # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + full_name + "\"")
+            # for result in results:
+            #     [self.queue.put(url) for url in result.result['urls']]
+            results = self.mgr.map(filter_func, query_source, 'pipl',
+                                   "first_name={}&last_name={}".format(self.params['FIRST_NAME'],
+                                                                       self.params['LAST_NAME']))
+        self.queue.join()
+        for key in self.results:
+            print(Fore.YELLOW + '{}: '.format(key) + Fore.RESET)
+            if isinstance(self.results[key], set):
+                for url in self.results[key]:
+                    print('\t{}'.format(url))
+            else:
+                print('{}'.format(self.results[key]))
+        print(Fore.CYAN + '=' * 100 + Fore.RESET)
 
     def do_set(self, params):
         """set [param] [value]
@@ -124,13 +191,20 @@ class Console(cmd.Cmd):
         print('Name: {} {}'.format(self.params.get('FIRST_NAME', ''), self.params.get('LAST_NAME', '')))
         print('Email: {}'.format(self.params.get('EMAIL', '')))
         print('Facebook: {}'.format(self.params.get('FACEBOOK', '')))
+        print('Linkedin: {}'.format(self.params.get('LINKEDIN', '')))
         print('')
 
     def __show_options(self):
         pass
 
     def __show_info(self):
-        pass
+        for key in self.results:
+            print('{}:'.format(key))
+            if isinstance(self.results[key], set):
+                for item in list(self.results[key]):
+                    print('\t{}'.format(item))
+            else:
+                print('\t{}'.format(self.results[key]))
 
     def do_EOF(self, line):
         return True
