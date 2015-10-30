@@ -1,5 +1,3 @@
-import json
-
 from colorama import Fore
 
 
@@ -511,6 +509,32 @@ class UserIDs(object):
         self._user_id = user_id
 
 
+class Organisation(object):
+    def __init__(self):
+        self._name = None
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, name):
+        self._name = name
+
+
+class Location(object):
+    def __init__(self):
+        self._name = None
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, name):
+        self._name = name
+
+
 class Person(object):
     def __init__(self):
         self._names = list()
@@ -529,13 +553,15 @@ class Person(object):
         self._relationships = list()
         self._images = list()
         self._urls = list()
+        self._organisations = list()
+        self._locations = list()
 
     def __str__(self):
         tmp = Fore.YELLOW + 'Name(s):' + Fore.RESET
         for name in self._names:
             tmp += '\n\t{}'.format(name.display)
         if self._gender.gender is not None:
-            tmp += Fore.YELLOW + '\nGender: {}'.format(self._gender.gender) + Fore.RESET
+            tmp += Fore.YELLOW + '\nGender:' + Fore.RESET + '{}'.format(self._gender.gender)
         tmp += Fore.YELLOW + '\nEmail(s):' + Fore.RESET
         for email in self._emails:
             tmp += '\n\t{}'.format(email.address)
@@ -558,7 +584,21 @@ class Person(object):
             tmp += '\n\t{}'.format(job.industry)
         tmp += Fore.YELLOW + '\nUser ID:' + Fore.RESET
         for user_id in self._user_ids:
-            tmp += '\n\t{}'.format(user_id.user_id)
+            if 'facebook' in user_id.user_id:
+                tmp += '\n\t{} https://www.facebook.com/profile.php?id={}'.format(user_id.user_id,
+                                                                                  user_id.user_id.split('@')[0])
+            elif 'linkedin' in user_id.user_id and '/' in user_id.user_id:
+                tmp += '\n\t{} https://www.linkedin.com/pub/{}-{}/{}'.format(user_id.user_id, self.names[0].first_name,
+                                                                             self.names[0].last_name,
+                                                                             user_id.user_id.split('@')[0])
+            else:
+                tmp += '\n\t{}'.format(user_id.user_id)
+        tmp += Fore.YELLOW + '\nOrganisation:' + Fore.RESET
+        for organisation in self._organisations:
+            tmp += '\n\t{}'.format(organisation.name)
+        tmp += Fore.YELLOW + '\nLocation:' + Fore.RESET
+        for location in self._locations:
+            tmp += '\n\t{}'.format(location.name)
         tmp += Fore.RESET + '\n'
         tmp += Fore.CYAN + '=' * 100 + Fore.RESET
         return tmp
@@ -568,147 +608,123 @@ class Person(object):
         if 'names' in data:
             for name in data['names']:
                 tmp = Name()
-                try:
-                    tmp.first_name = name['first']
-                    tmp.last_name = name['last']
-                    tmp.display = name['display']
-                    tmp.middle_name = name['middle']
-                except KeyError:
-                    pass
-                finally:
-                    self._names.append(tmp)
+                tmp.first_name = name.get('first')
+                tmp.last_name = name.get('last')
+                tmp.display = name.get('display')
+                tmp.middle_name = name.get('middle')
+                self._names.append(tmp)
 
         if 'usernames' in data:
             for username in data['usernames']:
                 tmp = Username()
-                try:
-                    tmp.name = username['content']
-                except KeyError:
-                    pass
-                finally:
-                    self._usernames.append(tmp)
+                tmp.name = username.get('content')
+                self._usernames.append(tmp)
 
         if 'urls' in data:
             for url in data['urls']:
                 tmp = Url()
-                try:
-                    tmp.url = url['url']
-                    tmp.domain = url['@domain']
-                    tmp.category = url['@category']
-                    tmp.name = url['@name']
-                except KeyError:
-                    pass
-                finally:
-                    self._urls.append(tmp)
+                tmp.url = url.get('url')
+                tmp.domain = url.get('@domain')
+                tmp.category = url.get('@category')
+                tmp.name = url.get('name')
+                self._urls.append(tmp)
 
         if 'origin_countries' in data:
             for origin in data['origin_countries']:
                 tmp = OriginCountry()
-                try:
-                    tmp.country = origin['country']
-                except KeyError:
-                    pass
-                finally:
-                    self._origin_countries.append(tmp)
+                tmp.country = origin.get('country')
+                self._origin_countries.append(tmp)
 
         if 'images' in data:
             for image in data['images']:
                 tmp = Image()
-                try:
-                    tmp.url = image['url']
-                except KeyError:
-                    pass
-                finally:
-                    self._images.append(tmp)
+                tmp.url = image.get('url')
+                self._images.append(tmp)
 
         if 'gender' in data:
             self._gender = Gender()
-            self._gender.gender = data['gender']['content']
+            self._gender.gender = data['gender'].get('content')
 
         if 'languages' in data:
             for language in data['languages']:
                 tmp = Language()
-                try:
-                    tmp.language = language['language']
-                    tmp.region = language['region']
-                    tmp.display = language['display']
-                except KeyError:
-                    pass
-                finally:
-                    self._languages.append(tmp)
+                tmp.language = language.get('language')
+                tmp.region = language.get('region')
+                tmp.display = language.get('display')
+                self._languages.append(tmp)
 
         if 'user_ids' in data:
             for ID in data['user_ids']:
                 tmp = UserIDs()
-                try:
-                    tmp.user_id = ID['content']
-                except KeyError:
-                    pass
-                finally:
-                    self._user_ids.append(tmp)
+                tmp.user_id = ID.get('content')
+                self._user_ids.append(tmp)
 
         if 'addresses' in data:
             for address in data['addresses']:
                 tmp = Address()
-                try:
-                    tmp.display = address['display']
-                    tmp.country = address['country']
-                    tmp.city = address['city']
-                    tmp.state = address['state']
-                    tmp.street = address['street']
-                    tmp.house_no = address['house']
-                    tmp.apartment_no = address['apartment']
-                    tmp.zip_code = address['zip_code']
-                except KeyError:
-                    pass
-                finally:
-                    self._addresses.append(tmp)
+                tmp.display = address.get('display')
+                tmp.country = address.get('country')
+                tmp.city = address.get('city')
+                tmp.state = address.get('state')
+                tmp.street = address.get('street')
+                tmp.house_no = address.get('house')
+                tmp.apartment_no = address.get('apartment')
+                tmp.zip_code = address.get('zip_code')
+                self._addresses.append(tmp)
 
         if 'educations' in data:
             for education in data['educations']:
                 tmp = Education()
-                try:
-                    tmp.display = education['display']
-                    tmp.school = education['school']
-                    if 'date_range' in education:
-                        tmp2 = DateRange()
-                        tmp2.start = education['date_range']['start']
-                        tmp2.end = education['date_range']['end']
-                        tmp.date_range = tmp2
-                    tmp.degree = education['degree']
-                except KeyError:
-                    pass
-                finally:
-                    self._educations.append(tmp)
+                tmp.display = education.get('display')
+                tmp.school = education.get('school')
+                if 'date_range' in education:
+                    tmp2 = DateRange()
+                    tmp2.start = education['date_range'].get('start')
+                    tmp2.end = education['date_range'].get('end')
+                    tmp.date_range = tmp2
+                tmp.degree = education.get('degree')
+                self._educations.append(tmp)
 
         if 'jobs' in data:
             for job in data['jobs']:
                 tmp = Job()
-                try:
-                    tmp.industry = job['industry']
-                    tmp.title = job['title']
-                    tmp.organisation = job['organization']
-                    tmp.display = job['display']
-                    if 'date_range' in job:
-                        tmp2 = DateRange()
-                        tmp2.start = job['date_range']['start']
-                        tmp2.end = job['date_range']['end']
-                        tmp.date_range = tmp2
-                except KeyError:
-                    pass
-                finally:
-                    self._jobs.append(tmp)
+                tmp.industry = job.get('industry')
+                tmp.title = job.get('title')
+                tmp.organisation = job.get('organization')
+                tmp.display = job.get('display')
+                if 'date_range' in job:
+                    tmp2 = DateRange()
+                    tmp2.start = job['date_range'].get('start')
+                    tmp2.end = job['date_range'].get('end')
+                    tmp.date_range = tmp2
+                self._jobs.append(tmp)
 
         if 'emails' in data:
             for email in data['emails']:
                 tmp = Email()
-                try:
-                    tmp.address = email['address']
-                    tmp.email_provider = email['@email_provider']
-                except KeyError:
-                    pass
-                finally:
-                    self._emails.append(tmp)
+                tmp.address = email.get('address')
+                tmp.email_provider = email.get('@email_provider')
+                self._emails.append(tmp)
+
+    def add_person(self, person):
+        self._addresses += person.addresses
+        if self._dob is None:
+            self._dob = person.dob
+        self._educations += person.educations
+        self._emails += person.emails
+        self._ethnicities += person.ethnicities
+        if self._gender is None:
+            self._gender = person.gender
+        self._images += person.images
+        self._jobs += person.jobs
+        self._languages += person.languages
+        self._names += person.names
+        self._origin_countries += person.origin_countries
+        self._phones += person.phones
+        self._relationships += person.relationships
+        self._urls += person.urls
+        self._user_ids += person.user_ids
+        self._usernames += person.usernames
 
     def add_name(self, name_obj):
         if isinstance(name_obj, Name):
@@ -794,138 +810,166 @@ class Person(object):
         else:
             raise TypeError("A Relationship object is required")
 
+    def add_organisation(self, organisation_obj):
+        if isinstance(organisation_obj, Organisation):
+            self._organisations.append(organisation_obj)
+        else:
+            raise TypeError("An Organisation object is required")
 
-if __name__ == '__main__':
-    p = Person()
-    data = json.loads('''{
-    "@http_status_code": 200,
-    "@visible_sources": 3,
-    "@available_sources": 3,
-    "@search_id": "1510210815255949377596975554993797861",
-    "query": {
-        "names": [
-            {
-                "first": "Thanat",
-                "last": "Sirithawornsant",
-                "display": "Thanat Sirithawornsant"
-            }
-        ]
-    },
-    "possible_persons": [
-        {
-            "@match": 0.0004,
-            "@search_pointer": "9cccc2b829d581c24bfd1b94d565063e7f211bd57e9687f16e935a450820e3f33fdbabfb1cf7be0ae0a8cedf3560dd67b073629f97b1c5624958cb3c317149d6528647334710fbb12e85931b88718834ca4d7e32eb68492b13ac3747811fe72875bdb75648d9548c09df24154b690019b6d702efd876b825bcdd70c4bb214a2888bc28ada082dd5fa3088867a1b9723e441d252939beef3d064d07067e55346a5f694c3fbda1123b7a6e54551d8fc7ce201be6f2300fbde6216a057a2bc8e4b49b586b8effd9f2e43ef1a9639d3cc87e50f1a4dd2656c56a41ee85721b6b62d3b073629f97b1c5624958cb3c317149d6aa2d6b16b47889bf08bee173a7ee3a6e",
-            "names": [
-                {
-                    "first": "Thanat",
-                    "last": "Sirithawornsant",
-                    "display": "Thanat Sirithawornsant"
-                }
-            ],
-            "usernames": [
-                {
-                    "content": "neew0llah"
-                }
-            ],
-            "gender": {
-                "content": "male"
-            },
-            "languages": [
-                {
-                    "@inferred": true,
-                    "region": "US",
-                    "language": "en",
-                    "display": "en_US"
-                }
-            ],
-            "origin_countries": [
-                {
-                    "@inferred": true,
-                    "country": "TH"
-                }
-            ],
-            "user_ids": [
-                {
-                    "content": "1392009737@facebook"
-                }
-            ],
-            "images": [
-                {
-                    "url": "http://graph.facebook.com/1392009737/picture?type=large",
-                    "thumbnail_token": "AE2861B242686E6ACBCD539D133B8AE59A9AE962DB1FA5AA7AF08DA8D66F09F912648682D9CDB2322ADF85744B699B543C4E5FE3AC5A92&dsid=39830"
-                }
-            ]
-        },
-        {
-            "@match": 0.0004,
-            "@search_pointer": "976a2f041d0434c2d3939b266eb92bb06b3d79b154f170bc76699d5476ca8ef1260ace39d223c15461d9bea1d5346d171ce0fe6b5e31cbd6b38f6976576fe8d82a086b684fee8f6f470752bc33a1e83fd722a24c7517effd8fcfc5b9e60dba85f67f8740aa62fadd7a04527163cb8ec9b198afef8ada52b65cb6880f5f63fa3465a4ff0f2b0a8dc8378e13339b5baa701bcccabd66bdf2a95f4c9bb61a6e6f15220f3606f4d09a9fc9a63b08bf3624f9dc187a68c73b22f7b34e4dfdb0ba4c366280a383d48ede618435c55ef80b6ab36bcc489b827427ff6a7ea041e7f0166429cbd9de2c91415619a28312fdc047beac30a39ad97d4b69f123678f8564532a19d4a5f9fc23fb7512de069db5f9e1d2df11187373942e0c25c27caf9e3697b889600bf0a925a33a55dc81a902394e011925d7974e051643db8511a07d905bb1d8e67bc4b6b95365f52adce3a54958645361904b489c1d68b745f4910de88cf116c6e645d849bd5f2f6b08db5046cfb07b2a5816d27b50b1820ee1b4994c38b4c89ca2d704e974566b8683831630f786eabc00b7e418415ed228944896b521a4",
-            "names": [
-                {
-                    "first": "Thanat",
-                    "last": "Sirithawornsant",
-                    "display": "Thanat Sirithawornsant"
-                }
-            ],
-            "languages": [
-                {
-                    "@inferred": true,
-                    "language": "th",
-                    "display": "th"
-                }
-            ],
-            "origin_countries": [
-                {
-                    "@inferred": true,
-                    "country": "TH"
-                }
-            ],
-            "addresses": [
-                {
-                    "country": "TH",
-                    "display": "Thailand"
-                }
-            ],
-            "jobs": [
-                {
-                    "industry": "Computer Software"
-                }
-            ],
-            "educations": [
-                {
-                    "degree": "Bachelor's degree",
-                    "school": "King Mongkut's Institute of Technology Ladkrabang",
-                    "date_range": {
-                        "start": "2012-01-01",
-                        "end": "2015-12-31"
-                    },
-                    "display": "Bachelor's degree from King Mongkut's Institute of Technology Ladkrabang (2012-2015)"
-                },
-                {
-                    "@valid_since": "2010-01-01",
-                    "school": "KMITL",
-                    "display": "KMITL"
-                },
-                {
-                    "@valid_since": "2010-01-01",
-                    "school": "Sarasas Ektra School",
-                    "date_range": {
-                        "start": "2000-01-01",
-                        "end": "2011-12-31"
-                    },
-                    "display": "Sarasas Ektra School (2000-2011)"
-                }
-            ],
-            "user_ids": [
-                {
-                    "content": "152968298@linkedin"
-                },
-                {
-                    "@valid_since": "2010-01-01",
-                    "content": "43/28B/3A2@linkedin"
-                }
-            ]
-        }
-    ]
-}''')
-    p.parse_json(data['possible_persons'][1])
-    print(p)
+    def add_location(self, location_obj):
+        if isinstance(location_obj, Location):
+            self._locations.append(location_obj)
+        else:
+            raise TypeError("A Location object is required")
+
+    @property
+    def addresses(self):
+        return self._addresses
+
+    @addresses.setter
+    def addresses(self, addresses):
+        self._addresses = addresses
+
+    @property
+    def dob(self):
+        return self._dob
+
+    @dob.setter
+    def dob(self, dob):
+        self._dob = dob
+
+    @property
+    def educations(self):
+        return self._educations
+
+    @educations.setter
+    def educations(self, educations):
+        self._educations = educations
+
+    @property
+    def educations(self):
+        return self._educations
+
+    @educations.setter
+    def educations(self, educations):
+        self._educations = educations
+
+    @property
+    def emails(self):
+        return self._emails
+
+    @emails.setter
+    def emails(self, emails):
+        self._emails = emails
+
+    @property
+    def ethnicities(self):
+        return self._ethnicities
+
+    @ethnicities.setter
+    def ethnicities(self, ethnicities):
+        self._ethnicities = ethnicities
+
+    @property
+    def gender(self):
+        return self._gender
+
+    @gender.setter
+    def gender(self, gender):
+        self._gender = gender
+
+    @property
+    def images(self):
+        return self._images
+
+    @images.setter
+    def images(self, images):
+        self._images = images
+
+    @property
+    def jobs(self):
+        return self._jobs
+
+    @jobs.setter
+    def jobs(self, jobs):
+        self._jobs = jobs
+
+    @property
+    def languages(self):
+        return self._languages
+
+    @languages.setter
+    def languages(self, languages):
+        self._languages = languages
+
+    @property
+    def names(self):
+        return self._names
+
+    @names.setter
+    def names(self, names):
+        self._names = names
+
+    @property
+    def origin_countries(self):
+        return self._origin_countries
+
+    @origin_countries.setter
+    def origin_countries(self, origin_countries):
+        self._origin_countries = origin_countries
+
+    @property
+    def phones(self):
+        return self._phones
+
+    @phones.setter
+    def phones(self, phones):
+        self._phones = phones
+
+    @property
+    def relationships(self):
+        return self._relationships
+
+    @relationships.setter
+    def relationships(self, relationships):
+        self._relationships = relationships
+
+    @property
+    def urls(self):
+        return self._urls
+
+    @urls.setter
+    def urls(self, urls):
+        self._urls = urls
+
+    @property
+    def user_ids(self):
+        return self._user_ids
+
+    @user_ids.setter
+    def user_ids(self, user_ids):
+        self._user_ids = user_ids
+
+    @property
+    def usernames(self):
+        return self._usernames
+
+    @usernames.setter
+    def usernames(self, usernames):
+        self._usernames = usernames
+
+    @property
+    def organisations(self):
+        return self._organisations
+
+    @organisations.setter
+    def organisations(self, organisations):
+        self._organisations = organisations
+
+    @property
+    def locations(self):
+        return self._locations
+
+    @locations.setter
+    def locations(self, locations):
+        self._locations = locations
