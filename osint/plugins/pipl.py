@@ -1,7 +1,6 @@
 from osint.models.person import Person
 from osint.plugins import base
 from osint.utils.requesters import Requester
-from osint.utils.results import Result
 
 
 class Pipl(base.SourceBase):
@@ -29,48 +28,46 @@ class Pipl(base.SourceBase):
                 self._query.append("username={}".format(query['USERNAME']))
 
     def get_result(self):
-        result = Result('Pipl')
         if isinstance(self.query, str):
             responses = [self.web_requester.get(self.url.format(self.query)), ]
         elif isinstance(self.query, list):
             responses = [self.web_requester.get(self.url.format(query)) for query in self.query]
+        else:
+            raise TypeError("A query is required")
+
+        person = Person()
 
         for response in responses:
             data = response.json()
-            if data['@http_status_code'] != 200:
+
+            if data['@http_status_code'] == 403:
+                raise RuntimeError('API calls limitation exceeds')
+            elif data['@http_status_code'] != 200:
                 continue
-            people = list()
             if 'person' in data:
-                person = Person()
                 person.parse_json(data['person'])
-                people.append(person)
             if 'possible_persons' in data:
-                for person in data['possible_persons']:
-                    tmp_person = Person()
-                    tmp_person.parse_json(person)
-                    people.append(tmp_person)
+                for possible_person in data['possible_persons']:
+                    person.parse_json(possible_person)
 
-            for person in people:
-                print(person)
+                    # try:
+                    #     result.add_images([url['url'] for url in data['person']['images']])
+                    # except KeyError:
+                    #     pass
+                    # try:
+                    #     result.add_origins([origin['country'] for origin in data['person']['origin_countries']])
+                    # except KeyError:
+                    #     pass
+                    # try:
+                    #     result.add_urls([url['url'] for url in data['person']['urls']])
+                    # except KeyError:
+                    #     pass
+                    # try:
+                    #     result.add_usernames([username['content'] for username in data['person']['usernames']])
+                    # except KeyError:
+                    #     pass
 
-                # try:
-                #     result.add_images([url['url'] for url in data['person']['images']])
-                # except KeyError:
-                #     pass
-                # try:
-                #     result.add_origins([origin['country'] for origin in data['person']['origin_countries']])
-                # except KeyError:
-                #     pass
-                # try:
-                #     result.add_urls([url['url'] for url in data['person']['urls']])
-                # except KeyError:
-                #     pass
-                # try:
-                #     result.add_usernames([username['content'] for username in data['person']['usernames']])
-                # except KeyError:
-                #     pass
-
-        return result
+        return person
 
 
 if __name__ == '__main__':
@@ -83,4 +80,4 @@ if __name__ == '__main__':
     # p.query = 'first_name=thanat&last_name=sirithawornsant'
     p.query = query
     result = p.get_result()
-    result.print_result()
+    print(result)
