@@ -2,12 +2,15 @@ from Queue import Queue
 import cmd
 import re
 from threading import Thread
+import time
 
 from bs4 import BeautifulSoup
-from colorama import Fore
 from requests import ConnectionError
 from stevedore import dispatch
 
+from osint.models.person import Person, Email, Phone, Name, Relationship, Organisation, Location
+from osint import THREAD_NO
+from osint.utils.ners import url_ner
 from osint.utils.requesters import Requester
 from utils.parsers import param_parser
 
@@ -26,10 +29,10 @@ class Console(cmd.Cmd):
         self.INPUT_PARAMS = ['FIRST_NAME', 'LAST_NAME', 'EMAIL', 'USERNAME', 'FACEBOOK', 'LINKEDIN']
         self.SHOW_PARAMS = ['params', 'options', 'info']
         self.queue = Queue()
-        self.results = dict()
+        self.result = Person()
         self.params = dict()
 
-        for i in range(3):
+        for i in range(THREAD_NO):
             thread = Thread(target=self.worker)
             thread.daemon = True
             thread.start()
@@ -48,21 +51,58 @@ class Console(cmd.Cmd):
             return
         soup = BeautifulSoup(res.content, 'html.parser')
         raw_text = soup.get_text(strip=True)
-        if 'email' in self.results:
-            self.results['email'] = self.results['email'].union(self._extract_email(raw_text))
-        else:
-            self.results['email'] = self._extract_email(raw_text)
 
-        if 'phone_no' in self.results:
-            self.results['phone_no'] = self.results['phone_no'].union(self._extract_phone_no(raw_text))
-        else:
-            self.results['phone_no'] = self._extract_phone_no(raw_text)
+        extracted_emails = self._extract_email(raw_text)
+        for email in extracted_emails:
+            email_obj = Email()
+            email_obj.address = email
+            self.result.add_email(email_obj)
+
+        extracted_phone_nos = self._extract_phone_no(raw_text)
+        for phone_no in extracted_phone_nos:
+            phone_no_obj = Phone()
+            phone_no_obj.number = phone_no
+            phone_no_obj.display = phone_no
+            self.result.add_phone(phone_no_obj)
 
         # extract using NLP
+        entities = url_ner(res.content)
+        for tag, data in entities:
+            if tag == 'PERSON':
+                if data.lower() == (self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']).lower():
+                    continue
+                relator = Relationship()
 
-        for key in self.results:
-            if isinstance(self.results[key], list):
-                self.results[key].sort()
+                relator_name = Name()
+                relator_first_name = data.split(' ')[0]
+                relator_last_name = data.split(' ')[-1]
+                relator_name.first_name = relator_first_name
+                relator_name.last_name = relator_last_name
+                relator_name.display = data
+
+                relator_person = Person()
+                relator_person.add_name(relator_name)
+
+                relator.person = relator_person
+                relator.relationship_type = 'Unknown'
+
+                self.result.add_relationship(relator)
+            elif tag == 'ORGANIZATION':
+                organisation = Organisation()
+                organisation.name = data
+
+                self.result.add_organisation(organisation)
+            elif tag == 'LOCATION':
+                location = Location()
+                location.name = data
+
+                self.result.add_location(location)
+
+                # for key in self.result:
+                #     if isinstance(self.result[key], list):
+                #         counts = collections.Counter(self.result[key])
+                #         self.result[key] = sorted(self.result[key], key=counts.get, reverse=True)
+                #         self.result[key] = list(collections.OrderedDict.fromkeys(self.result[key]))
 
     def _extract_email(self, text):
         results = re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.(?!PNG|JPG|JS|GIF)[A-Z]{2,}', text, flags=re.IGNORECASE)
@@ -93,7 +133,7 @@ class Console(cmd.Cmd):
             ext.obj.query = data
             return ext.obj.get_result()
 
-        self.results.clear()
+        start_time = time.time()
 
         if 'EMAIL' in self.params:
             if ',' in self.params['EMAIL']:
@@ -108,6 +148,11 @@ class Console(cmd.Cmd):
                     # for result in results:
                     #     [self.queue.put(url) for url in result.result['urls']]
 
+                persons = self.mgr.map(filter_func, query_source, 'pipl', "email={}".format(self.params['EMAIL']))
+
+                for person in persons:
+                    self.result.add_person(person)
+
         if 'FIRST_NAME' in self.params and 'LAST_NAME' in self.params:
             full_name = self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']
             results = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
@@ -116,18 +161,27 @@ class Console(cmd.Cmd):
             # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + full_name + "\"")
             # for result in results:
             #     [self.queue.put(url) for url in result.result['urls']]
-            results = self.mgr.map(filter_func, query_source, 'pipl',
+            persons = self.mgr.map(filter_func, query_source, 'pipl',
                                    "first_name={}&last_name={}".format(self.params['FIRST_NAME'],
                                                                        self.params['LAST_NAME']))
+            for person in persons:
+                self.result.add_person(person)
+
         self.queue.join()
-        for key in self.results:
-            print(Fore.YELLOW + '{}: '.format(key) + Fore.RESET)
-            if isinstance(self.results[key], set):
-                for url in self.results[key]:
-                    print('\t{}'.format(url))
-            else:
-                print('{}'.format(self.results[key]))
-        print(Fore.CYAN + '=' * 100 + Fore.RESET)
+        print(self.result)
+        # for key in self.result:
+        #     print(Fore.YELLOW + '{}: '.format(key) + Fore.RESET)
+        #     if isinstance(self.result[key], set) or isinstance(self.result[key], list):
+        #         for url in self.result[key]:
+        #             print('\t{}'.format(url))
+        #     else:
+        #         print('{}'.format(self.result[key]))
+        # print(Fore.CYAN + '=' * 100 + Fore.RESET)
+
+        end_time = time.time()
+        hours, rem = divmod(end_time - start_time, 3600)
+        minutes, seconds = divmod(rem, 60)
+        print("Elapsed time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
 
     def do_set(self, params):
         """set [param] [value]
@@ -198,13 +252,14 @@ class Console(cmd.Cmd):
         pass
 
     def __show_info(self):
-        for key in self.results:
-            print('{}:'.format(key))
-            if isinstance(self.results[key], set):
-                for item in list(self.results[key]):
-                    print('\t{}'.format(item))
-            else:
-                print('\t{}'.format(self.results[key]))
+        print(self.result)
+        # for key in self.result:
+        #     print('{}:'.format(key))
+        #     if isinstance(self.result[key], set):
+        #         for item in list(self.result[key]):
+        #             print('\t{}'.format(item))
+        #     else:
+        #         print('\t{}'.format(self.result[key]))
 
     def do_EOF(self, line):
         return True
