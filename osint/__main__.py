@@ -1,3 +1,5 @@
+import sys
+
 from logbook import FileHandler
 
 from osintconsole import Console
@@ -6,10 +8,13 @@ log_handler = FileHandler('application.log')
 
 
 def main():
-    try:
-        Console().cmdloop()
-    except KeyboardInterrupt:
-        print("Quitting...")
+    console = Console()
+    while True:
+        try:
+            console.cmdloop()
+        except KeyboardInterrupt:
+            print("Quitting...")
+            sys.exit(0)
 
 
 if __name__ == '__main__':
