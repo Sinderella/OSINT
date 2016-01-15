@@ -25,7 +25,7 @@ class Google(base.SourceBase):
 
     def get_result(self):
         result = Result('Google')
-        for n in range(0, 20, 10):
+        for n in range(0, 10, 10):
             response = self.web_requester.get(self.url.format(self.query, n))
             soup = BeautifulSoup(response.content, "html.parser")
             tmp = soup.select('#res')
