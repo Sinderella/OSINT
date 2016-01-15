@@ -11,6 +11,9 @@ build/
 dist/
 *.egg-info
 
+# DB
+db/
+
 # Log
 *.log
 
