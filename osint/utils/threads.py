@@ -17,8 +17,8 @@ from osint.utils.requesters import Requester
 
 
 class ProcessBase(Thread):
-    def __init__(self, item_type, lock, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
-        super(ProcessBase, self).__init__(group, target, name, args, kwargs, verbose)
+    def __init__(self, item_type, lock):
+        super(ProcessBase, self).__init__()
         self.queue = WorkerQueue()
         self.start_time = time.time()
         self.added = False
@@ -47,8 +47,8 @@ class ProcessBase(Thread):
 
 
 class Scraper(ProcessBase):
-    def __init__(self, db_name, lock, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
-        super(Scraper, self).__init__("URL", lock, group, target, name, args, kwargs, verbose)
+    def __init__(self, db_name, lock):
+        super(Scraper, self).__init__("URL", lock)
         self.db_name = db_name
         self.cur_db = None
 
@@ -79,7 +79,7 @@ class Scraper(ProcessBase):
         except ConnectionError:
             return
         soup = BeautifulSoup(res.content, 'html.parser')
-        raw_text = soup.get_text(strip=True)
+        raw_text = soup.get_text("|", strip=True)
 
         hash_filename = hashlib.sha1(self.db_name + '//' + url).hexdigest()
         with codecs.open(self.db_name + '/' + hash_filename + '.html', 'w', encoding='utf8') as fp:
@@ -93,8 +93,8 @@ class Scraper(ProcessBase):
 
 
 class Extractor(ProcessBase):
-    def __init__(self, db_name, lock, group=None, target=None, name=None, args=(), kwargs=None, verbose=None):
-        super(Extractor, self).__init__("document", lock, group, target, name, args, kwargs, verbose)
+    def __init__(self, db_name, lock):
+        super(Extractor, self).__init__("document", lock)
         self.db_name = db_name
         self.cur_db = None
 
