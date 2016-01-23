@@ -1,24 +1,19 @@
-# encoding=utf8
+# encoding: utf-8
 from __future__ import print_function
 
 import cmd
 import codecs
 import datetime
-import hashlib
+import errno
 import operator
 import os
-import re
 import sqlite3
-import time
-from threading import Thread, Lock, Timer, Event, Semaphore
+from threading import Lock, Semaphore
 
-from bs4 import BeautifulSoup
-from requests import ConnectionError
 from stevedore import dispatch
 
 from osint.models.person import Person
 from osint.utils.queues import WorkerQueue
-from osint.utils.requesters import Requester
 from osint.utils.threads import Scraper, Extractor
 from utils.parsers import param_parser
 
@@ -63,13 +58,13 @@ class Console(cmd.Cmd):
         cur_db_cursor = cur_db.cursor()
 
         results = cur_db_cursor.execute("SELECT did, path FROM documents").fetchall()
-        extracter = Extractor(self.cur_db_name, self.lock)
-        extracter.start()
-        print("[*] Started entities extration...")
+        extractor = Extractor(self.cur_db_name, self.lock)
+        extractor.start()
+        print("[*] Started entities extraction...")
         for result in results:
             document_id = result[0]
             path_to_html = result[1]
-            extracter.put((document_id, path_to_html))
+            extractor.put((document_id, path_to_html))
 
     def analyse(self):
         # TODO: analyse the extracted entities
@@ -131,8 +126,9 @@ class Console(cmd.Cmd):
 
         try:
             os.mkdir('./db')
-        except OSError:
-            pass
+        except OSError as e:
+            if e.errno != errno.EEXIST:
+                pass
 
         self.cur_db_name = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         os.mkdir('./db/' + self.cur_db_name)
@@ -287,7 +283,7 @@ class Console(cmd.Cmd):
         loaded_row = self.cur_db_cursor.fetchall()[0][0]
         print("{} documents are loaded".format(loaded_row))
 
-    def do_list(self, params):
+    def do_list(self, params=None):
         """list
         List the saved states of gathered documents
         """
@@ -297,8 +293,8 @@ class Console(cmd.Cmd):
             pass
         dir_list = [filename for filename in os.listdir('./db') if os.path.isdir('./db/' + filename)]
         print("Saved states:")
-        for dir in dir_list:
-            print("\t{}".format(dir))
+        for dir_name in dir_list:
+            print("\t{}".format(dir_name))
 
     def do_listdoc(self, params):
         """listdoc
