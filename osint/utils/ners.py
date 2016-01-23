@@ -1,13 +1,14 @@
 from itertools import groupby
 
 from bs4 import BeautifulSoup
-from nltk import StanfordNERTagger, wordpunct_tokenize
+from nltk import wordpunct_tokenize
+from nltk.tag import StanfordNERTagger
 
 
-def url_ner(content):
+def html_ner(content):
     st = StanfordNERTagger(
         './lib/classifiers/english.all.3class.distsim.crf.ser.gz',
-        './lib/stanford-ner.jar')
+        './lib/stanford-ner-3.5.2.jar')
     soup = BeautifulSoup(content, "html.parser")
     for script in soup(["script", "style", "sup"]):
         script.extract()
