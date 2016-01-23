@@ -57,8 +57,6 @@ class Scraper(ProcessBase):
         while True:
             self.lock.acquire()
             url = self.queue.get()
-            # TODO: separate extraction to different thread
-            # TODO: optimise db connection overhead
             self.save_html(url)
             self.lock.release()
             self.queue.task_done()
