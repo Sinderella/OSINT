@@ -10,17 +10,16 @@ import os
 import re
 import sqlite3
 import time
-from threading import Thread, Lock, Timer
+from threading import Thread, Lock, Timer, Event, Semaphore
 
 from bs4 import BeautifulSoup
 from requests import ConnectionError
 from stevedore import dispatch
 
 from osint.models.person import Person
-from osint.utils.db_helpers import insert_entity
-from osint.utils.ners import html_ner
 from osint.utils.queues import WorkerQueue
 from osint.utils.requesters import Requester
+from osint.utils.threads import Scraper, Extractor
 from utils.parsers import param_parser
 
 
@@ -47,107 +46,14 @@ class Console(cmd.Cmd):
         self.cur_db = None
 
         self.lock = Lock()
+        self.sema = Semaphore(1)
         self.running = False
         self.url_timer_running = False
         self.extract_timer_running = False
 
         self.start_time = 0
 
-        # for i in range(THREAD_NO): # TODO: make it multithreading
-        thread_targets = [self.url_worker, self.extract_worker]
-        for target in thread_targets:
-            thread = Thread(target=target)
-            thread.daemon = True
-            thread.start()
-
-    def url_worker(self):
-        while True:
-            self.lock.acquire()
-            url = self.url_queue.get()
-            if not self.url_timer_running:
-                self.url_timer_running = True
-                self.url_timer()
-            # TODO: separate extraction to different thread
-            # TODO: optimise db connection overhead
-            self.save_html(url)
-            self.url_queue.task_done()
-            self.lock.release()
-            if self.url_queue.empty():
-                self.url_queue.reset_count()
-                self.prompt = "osint$ "
-                self.running = False
-                self.url_timer_running = False
-
-                end_time = time.time()
-                hours, rem = divmod(end_time - self.start_time, 3600)
-                minutes, seconds = divmod(rem, 60)
-                print("\n[*] Elapsed time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
-                print(self.prompt, end='')
-
-    def extract_worker(self):
-        while True:
-            self.lock.acquire()
-            url = self.extract_queue.get()
-            if not self.extract_timer_running:
-                self.extract_timer_running = True
-                self.extract_timer()
-            self.extract_queue.task_done()
-            self.lock.release()
-            if self.extract_queue.empty():
-                self.extract_queue.reset_count()
-                self.prompt = "osint$ "
-                self.running = False
-                self.extract_timer_running = False
-
-                end_time = time.time()
-                hours, rem = divmod(end_time - self.start_time, 3600)
-                minutes, seconds = divmod(rem, 60)
-                print("\n[*] Elapsed time: {:0>2}:{:0>2}:{:05.2f}".format(int(hours), int(minutes), seconds))
-                print(self.prompt, end='')
-
-    def url_timer(self):
-        if self.running and self.url_timer_running:
-            self._update_progress(self.url_queue.get_done(), self.url_queue.get_total(), "URL")
-            Timer(300, self.url_timer).start()
-        else:
-            self.url_timer_running = False
-
-    def save_html(self, url):
-        req = Requester()
-        try:
-            res = req.get(url)
-        except ConnectionError:
-            return
-        soup = BeautifulSoup(res.content, 'html.parser')
-        raw_text = soup.get_text(strip=True)
-
-        hash_filename = hashlib.sha1(self.cur_db_name + '//' + url).hexdigest()
-        with codecs.open(self.cur_db_name + '/' + hash_filename + '.html', 'w', encoding='utf8') as fp:
-            fp.write(raw_text)
-        cur_db = sqlite3.connect(self.cur_db_name + '/documents.db')
-        cur_db_cursor = cur_db.cursor()
-        cur_db_cursor.execute("""
-        insert into documents (url, path)
-        values ('{}', '{}')
-        """.format(url, self.cur_db_name + '/' + hash_filename + '.html'))
-        cur_db.commit()
-        cur_db.close()
-
-    def extract_timer(self):
-        if self.running and self.url_timer_running:
-            self._update_progress(self.url_queue.get_done(), self.url_queue.get_total(), "document")
-            Timer(300, self.extract_timer).start()
-        else:
-            self.url_timer_running = False
-
     def extract_info(self):
-        # TODO: implement timer for extracting
-        if self.running:
-            print("[!] The program is running in the background, only one instance is allowed to be running")
-            return
-        self.prompt = "[extracting] osint$ "
-        self.running = True
-        self.start_time = time.time()
         print("[*] Connecting to the database...")
         try:
             cur_db = sqlite3.connect(self.cur_db_name + '/documents.db')
@@ -157,85 +63,13 @@ class Console(cmd.Cmd):
         cur_db_cursor = cur_db.cursor()
 
         results = cur_db_cursor.execute("SELECT did, path FROM documents").fetchall()
-        print("[*] Started extracting entities...")
+        extracter = Extractor(self.cur_db_name, self.lock)
+        extracter.start()
+        print("[*] Started entities extration...")
         for result in results:
             document_id = result[0]
             path_to_html = result[1]
-            with codecs.open(path_to_html, 'rt', encoding='utf8') as fp:
-                raw_text = fp.read()
-            extracted_emails = self._extract_email(raw_text)
-            for email in extracted_emails:
-                insert_entity(cur_db_cursor, document_id, email, 'Email')
-                # email_obj = Email()
-                # email_obj.address = email
-                # self.result.add_email(email_obj)
-
-            extracted_phone_nos = self._extract_phone_no(raw_text)
-            for phone_no in extracted_phone_nos:
-                insert_entity(cur_db_cursor, document_id, phone_no, 'Phone')
-                # phone_no_obj = Phone()
-                # phone_no_obj.number = phone_no
-                # phone_no_obj.display = phone_no
-                # self.result.add_phone(phone_no_obj)
-
-            # extract using NLP
-            entities = html_ner(raw_text)
-            for tag, data in entities:
-                if tag == 'PERSON':
-                    insert_entity(cur_db_cursor, document_id, data, 'Name')
-                    # relator = Relationship()
-                    #
-                    # relator_name = Name()
-                    # relator_first_name = data.split(' ')[0]
-                    # relator_last_name = data.split(' ')[-1]
-                    # relator_name.first_name = relator_first_name
-                    # relator_name.last_name = relator_last_name
-                    # relator_name.display = data
-                    #
-                    # relator_person = Person()
-                    # relator_person.add_name(relator_name)
-                    #
-                    # relator.person = relator_person
-                    # relator.relationship_type = 'Unknown'
-                    #
-                    # self.result.add_relationship(relator)
-                elif tag == 'ORGANIZATION':
-                    insert_entity(cur_db_cursor, document_id, data, 'Organisation')
-                    # organisation = Organisation()
-                    # organisation.name = data
-                    #
-                    # self.result.add_organisation(organisation)
-                elif tag == 'LOCATION':
-                    insert_entity(cur_db_cursor, document_id, data, 'Location')
-                    # location = Location()
-                    # location.name = data
-                    #
-                    # self.result.add_location(location)
-        cur_db.commit()
-        print("[*] Entities extraction is completed")
-
-        # for key in self.result:
-        #     if isinstance(self.result[key], list):
-        #         counts = collections.Counter(self.result[key])
-        #         self.result[key] = sorted(self.result[key], key=counts.get, reverse=True)
-        #         self.result[key] = list(collections.OrderedDict.fromkeys(self.result[key]))
-
-    def _extract_email(self, text):
-        # results = re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.(?!PNG|JPG|JS|GIF)[A-Z]{2,}', text, flags=re.IGNORECASE)
-        # results = re.findall(r'^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$', text, flags=re.IGNORECASE)
-        # TODO: find a better regex
-        results = re.findall(r'[a-z0-9\.]+@[a-z0-9\.]+\.[a-z]{2,}', text, flags=re.IGNORECASE)
-        return set(results)
-
-    def _extract_phone_no(self, text):
-        # results = re.findall(r'(\+[0-9]{1,4}\(0\)[0-9\ ]{,8}|0[0-9\ ]{8,12})', text)
-        results = re.findall(r'\+(?:[0-9]?){6,14}[0-9]', text)
-        return set(results)
-
-    def _update_progress(self, done_url, total_url, type):
-        total_percentage = done_url * 100.0 / total_url
-        print("\n[{0:5.2f}%] {1} remaining {2}s ({3} total {2}s)".format(total_percentage, total_url - done_url, type,
-                                                                         total_url))
+            extracter.put((document_id, path_to_html))
 
     def analyse(self):
         # TODO: analyse the extracted entities
@@ -295,13 +129,6 @@ class Console(cmd.Cmd):
             ext.obj.query = data
             return ext.obj.get_result()
 
-        if self.running:
-            print("[!] The program is running in the background, only one instance is allowed to be running")
-            return
-        self.prompt = "[running] osint$ "
-        self.running = True
-        self.start_time = time.time()
-
         try:
             os.mkdir('./db')
         except OSError:
@@ -322,6 +149,8 @@ class Console(cmd.Cmd):
         self.cur_db.commit()
 
         print("[*] Started scraping websites...")
+        scraper = Scraper(self.cur_db_name, self.lock)
+        scraper.start()
 
         # TODO: build queries based on input, permute through all inputs with full name
         # TODO: insert inputs as entities
@@ -333,22 +162,24 @@ class Console(cmd.Cmd):
             for email in emails:
                 results = self.mgr.map(filter_func, query_source, 'google', "\"" + email + "\"")
                 for result in results:
-                    [self.url_queue.put(url) for url in result.result['urls']]
+                    [scraper.put(url) for url in result.result['urls']]
+                    # [self.url_queue.put(url) for url in result.result['urls']]
                     # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + email + "\"")
                     # for result in results:
                     #     [self.queue.put(url) for url in result.result['urls']]
 
-                persons = self.mgr.map(filter_func, query_source, 'pipl', "email={}".format(self.params['EMAIL']))
-
-                for person in persons:
-                    self.result.add_person(person)
+                    # persons = self.mgr.map(filter_func, query_source, 'pipl', "email={}".format(self.params['EMAIL']))
+                    #
+                    # for person in persons:
+                    #     self.result.add_person(person)
 
         if 'FIRST_NAME' in self.params and 'LAST_NAME' in self.params:
             full_name = self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']
             # insert_entity(self.cur_db_cursor, None, full_name, 'Name')
             results = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
             for result in results:
-                [self.url_queue.put(url) for url in result.result['urls']]
+                [scraper.put(url) for url in result.result['urls']]
+                # [self.url_queue.put(url) for url in result.result['urls']]
                 # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + full_name + "\"")
                 # for result in results:
                 #     [self.queue.put(url) for url in result.result['urls']]
@@ -373,15 +204,12 @@ class Console(cmd.Cmd):
         """pause
         Pause the running task in background
         """
-        self.prompt = "[paused] osint$ "
-        self.url_timer_running = False
         self.lock.acquire()
 
     def do_resume(self, params):
         """resume
         Resume the paused task running in background
         """
-        self.prompt = "[running] osint$ "
         self.lock.release()
 
     def do_set(self, params):
