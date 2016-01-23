@@ -1,7 +1,11 @@
 CREATE TABLE documents (
   did INTEGER PRIMARY KEY autoincrement NOT NULL,
-  url text,
+  url text UNIQUE,
   path text
+);
+
+CREATE TABLE entity_types (
+  type text UNIQUE
 );
 
 CREATE TABLE entities (
@@ -11,8 +15,4 @@ CREATE TABLE entities (
   entity text,
   FOREIGN KEY(did) REFERENCES documents(did),
   FOREIGN KEY(type) REFERENCES entity_type(type)
-);
-
-CREATE TABLE entity_types (
-  type text
 );

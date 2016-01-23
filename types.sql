@@ -1,6 +1,7 @@
 INSERT INTO entity_types(type) VALUES
   ('Name'),
   ('Email'),
+  ('Phone'),
   ('Image'),
   ('URL'),
   ('Education'),
