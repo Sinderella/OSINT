@@ -30,7 +30,7 @@ class ProcessBase(Thread):
         if not self.added:
             return
         self._update_progress()
-        Timer(300, self.timer).start()
+        Timer(120, self.timer).start()
 
     def put(self, item):
         if not self.added:
