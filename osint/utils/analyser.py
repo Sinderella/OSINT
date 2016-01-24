@@ -13,7 +13,23 @@ class Analyser(object):
         self.cursor = self.cur_db.cursor()
 
     def analyse(self):
-        print(self.compute_tf_idf())
+        results = self.cursor.execute('SELECT type, entity FROM entities')
+        tmp = results.fetchall()
+        entity_score = DataFrame(tmp, columns=['e_type', 'entity'])
+        entity_score = entity_score.drop_duplicates()
+
+        tmp = self.compute_tf_idf()
+        entity_score.loc[:, 'tf_idf'] = entity_score['entity'].apply(lambda x: tmp['tf_idf'][x])
+
+        result = None
+        for e_type in entity_score['e_type'].unique():
+            if result is None:
+                result = entity_score[entity_score['e_type'] == e_type].sort_values('tf_idf', ascending=False).iloc[0:5]
+            else:
+                result = pd.concat([result, entity_score[entity_score['e_type'] == e_type]
+                                   .sort_values('tf_idf', ascending=False).iloc[0:5]])
+
+        print(result.to_string(index=False))
 
     def compute_tf_idf(self):
         # Find total number of document
@@ -46,7 +62,8 @@ class Analyser(object):
             doc_t = doc_t_df.get_value(entity)
             idf = np.log(total_doc / doc_t)
             tf_idf = tf * idf
-            tf_idf_list.append([did, entity, tf_idf])
+            tf_idf_list.append([entity, tf_idf])
 
-        tf_idf_df = DataFrame(tf_idf_list, columns=['did', 'entity', 'tf_idf'])
+        tf_idf_df = DataFrame(tf_idf_list, columns=['entity', 'tf_idf'])
+        tf_idf_df = tf_idf_df.groupby('entity').agg('sum')
         return tf_idf_df
