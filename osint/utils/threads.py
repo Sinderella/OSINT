@@ -77,16 +77,18 @@ class Scraper(ProcessBase):
         except ConnectionError:
             return
         soup = BeautifulSoup(res.content, 'html.parser')
-        raw_text = soup.get_text("|", strip=True)
+        raw_text = soup.get_text("\n", strip=True)
+        statements = [line for line in raw_text.split('\n')]
+        total_word = len(statements)
 
         hash_filename = hashlib.sha1(self.db_name + '//' + url).hexdigest()
         with codecs.open(self.db_name + '/' + hash_filename + '.html', 'w', encoding='utf8') as fp:
             fp.write(raw_text)
         cur_db_cursor = self.cur_db.cursor()
         cur_db_cursor.execute("""
-        insert into documents (url, path)
-        values ('{}', '{}')
-        """.format(url, self.db_name + '/' + hash_filename + '.html'))
+        insert into documents (url, total_word, path)
+        values ('{}', {}, '{}')
+        """.format(url, total_word, self.db_name + '/' + hash_filename + '.html'))
         self.cur_db.commit()
 
 

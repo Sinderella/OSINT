@@ -1,5 +1,6 @@
 CREATE TABLE documents (
   did INTEGER PRIMARY KEY autoincrement NOT NULL,
+  total_word INTEGER,
   url text UNIQUE,
   path text
 );
