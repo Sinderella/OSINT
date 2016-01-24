@@ -13,6 +13,7 @@ from threading import Lock, Semaphore
 from stevedore import dispatch
 
 from osint.models.person import Person
+from osint.utils.analyser import Analyser
 from osint.utils.queues import WorkerQueue
 from osint.utils.threads import Scraper, Extractor
 from utils.parsers import param_parser
@@ -67,35 +68,37 @@ class Console(cmd.Cmd):
             extractor.put((document_id, path_to_html))
 
     def analyse(self):
-        # TODO: analyse the extracted entities
-        try:
-            cur_db = sqlite3.connect(self.cur_db_name + '/documents.db')
-        except sqlite3.Error as e:
-            print("[!] An error occurred: {}".format(e.args[0]))
-            return
-        cur_db_cursor = cur_db.cursor()
-        entities = {}
-        results = cur_db_cursor.execute('SELECT type FROM entity_types')
-        for result in results:
-            entities[result[0]] = {}
-
-        results = cur_db_cursor.execute('SELECT type, entity FROM entities')
-        for result in results:
-            entity_type = result[0]
-            entity = result[1]
-            if entity in entities.get(entity_type):
-                entities[entity_type][entity] = entities.get(entity_type).get(entity) + 1
-            elif entities.get(entity_type) is not None:
-                entities[entity_type][entity] = 1
-
-        # rank by frequency
-        for entity_type in entities:
-            entities[entity_type] = sorted(entities.get(entity_type).items(), key=operator.itemgetter(1), reverse=True)
-        # print out the entities
-        for entity_type in entities:
-            print("{}:".format(entity_type))
-            for entity in entities[entity_type]:
-                print("[{0}] {1}".format(entity[1], entity[0].encode('utf-8')))
+        analyser = Analyser(self.cur_db_name)
+        analyser.analyse()
+        # # TODO: analyse the extracted entities
+        # try:
+        #     cur_db = sqlite3.connect(self.cur_db_name + '/documents.db')
+        # except sqlite3.Error as e:
+        #     print("[!] An error occurred: {}".format(e.args[0]))
+        #     return
+        # cur_db_cursor = cur_db.cursor()
+        # entities = {}
+        # results = cur_db_cursor.execute('SELECT type FROM entity_types')
+        # for result in results:
+        #     entities[result[0]] = {}
+        #
+        # results = cur_db_cursor.execute('SELECT type, entity FROM entities')
+        # for result in results:
+        #     entity_type = result[0]
+        #     entity = result[1]
+        #     if entity in entities.get(entity_type):
+        #         entities[entity_type][entity] = entities.get(entity_type).get(entity) + 1
+        #     elif entities.get(entity_type) is not None:
+        #         entities[entity_type][entity] = 1
+        #
+        # # rank by frequency
+        # for entity_type in entities:
+        #     entities[entity_type] = sorted(entities.get(entity_type).items(), key=operator.itemgetter(1), reverse=True)
+        # # print out the entities
+        # for entity_type in entities:
+        #     print("{}:".format(entity_type))
+        #     for entity in entities[entity_type]:
+        #         print("[{0}] {1}".format(entity[1], entity[0].encode('utf-8')))
 
     def do_analyse(self, params):
         self.analyse()
