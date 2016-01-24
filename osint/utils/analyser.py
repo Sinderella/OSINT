@@ -13,23 +13,29 @@ class Analyser(object):
         self.cursor = self.cur_db.cursor()
 
     def analyse(self):
-        results = self.cursor.execute('SELECT type, entity FROM entities')
-        tmp = results.fetchall()
-        entity_score = DataFrame(tmp, columns=['e_type', 'entity'])
-        entity_score = entity_score.drop_duplicates()
+        print('Frequency:\n{}'.format(self.compute_frequency()))
+        print('TF.IDF:\n{}'.format(self.compute_tf_idf()))
 
-        tmp = self.compute_tf_idf()
-        entity_score.loc[:, 'tf_idf'] = entity_score['entity'].apply(lambda x: tmp['tf_idf'][x])
-
+    @staticmethod
+    def get_category_top5(df, sort_by):
         result = None
-        for e_type in entity_score['e_type'].unique():
+        for e_type in df['e_type'].unique():
             if result is None:
-                result = entity_score[entity_score['e_type'] == e_type].sort_values('tf_idf', ascending=False).iloc[0:5]
+                result = df[df['e_type'] == e_type].sort_values(sort_by, ascending=False).iloc[0:5]
             else:
-                result = pd.concat([result, entity_score[entity_score['e_type'] == e_type]
-                                   .sort_values('tf_idf', ascending=False).iloc[0:5]])
+                result = pd.concat([result, df[df['e_type'] == e_type]
+                                   .sort_values(sort_by, ascending=False).iloc[0:5]])
 
-        print(result.to_string(index=False))
+        return result.sort_values(['e_type', sort_by], ascending=[True, False]).to_string(index=False)
+
+    def compute_frequency(self):
+        results = self.cursor.execute('SELECT did, type, entity FROM entities')
+        tmp = results.fetchall()
+        df = DataFrame(tmp, columns=['did', 'e_type', 'entity'])
+        tmp = df.groupby(['e_type', 'entity']).size().reset_index()
+        tmp.rename(columns={0: 'term_freq'}, inplace=True)
+
+        return self.get_category_top5(tmp, 'term_freq')
 
     def compute_tf_idf(self):
         # Find total number of document
@@ -40,6 +46,9 @@ class Analyser(object):
         results = self.cursor.execute('SELECT did, type, entity FROM entities')
         tmp = results.fetchall()
         df = DataFrame(tmp, columns=['did', 'e_type', 'entity'])
+
+        base_df = df[['e_type', 'entity']]
+        base_df = base_df.drop_duplicates()
 
         doc_t_df = df.drop_duplicates().groupby('entity').size()
 
@@ -66,4 +75,7 @@ class Analyser(object):
 
         tf_idf_df = DataFrame(tf_idf_list, columns=['entity', 'tf_idf'])
         tf_idf_df = tf_idf_df.groupby('entity').agg('sum')
-        return tf_idf_df
+
+        base_df.loc[:, 'tf_idf'] = base_df['entity'].apply(lambda x: tf_idf_df['tf_idf'][x])
+
+        return self.get_category_top5(base_df, 'tf_idf')
