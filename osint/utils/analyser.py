@@ -28,9 +28,54 @@ class Analyser(object):
             'type_3': ['country']}
 
     def analyse(self):
-        print('Frequency:\n{}'.format(self.compute_frequency()))
-        print('TF.IDF:\n{}'.format(self.compute_tf_idf()))
-        print('Ambiguity:\n{}'.format(self.compute_ambiguity()))
+        combined_df = DataFrame(columns=['e_type', 'entity', 'score'])
+
+        frequency_df = self.compute_frequency()
+        tf_idf_df = self.compute_tf_idf()
+        ambiguity_df = self.compute_ambiguity()
+
+        # combined_df['score'] = self.normalise(frequency_df, combined_df)
+        # combined_df['score'] = self.normalise(tf_idf_df, combined_df)
+        # combined_df['score'] = self.normalise(ambiguity_df, combined_df)
+
+        combined_df = frequency_df.copy()
+        combined_df.rename(columns={2: 'score'}, inplace=True)
+        combined_df['score'] = 0
+        combined_df['score'] = combined_df['score'] + self.normalise(frequency_df, combined_df)
+        combined_df['score'] = combined_df['score'] + self.normalise(tf_idf_df, combined_df)
+        combined_df['score'] = combined_df['score'] + self.normalise(ambiguity_df, combined_df)
+
+        combined_df['score'] = combined_df['score'].apply(lambda x: x/3)
+
+        # print(self.normalise(tf_idf_df, combined_df))
+        print(self.get_category_top5(combined_df, 'score'))
+        # print('Frequency:\n{}'.format(self.compute_frequency()))
+        # print('TF.IDF:\n{}'.format(self.compute_tf_idf()))
+        # print('Ambiguity:\n{}'.format(self.compute_ambiguity()))
+
+    @staticmethod
+    def normalise(src_df, dst_db):
+        column = None
+        lower_bound = 0
+        upper_bound = 0
+        if 'term_freq' in src_df.columns:
+            lower_bound = src_df['term_freq'].idxmin()
+            upper_bound = src_df['term_freq'].idxmax()
+            column = 'term_freq'
+        elif 'tf_idf' in src_df.columns:
+            lower_bound = 0
+            upper_bound = 1
+            column = 'tf_idf'
+        elif 'score' in src_df.columns:
+            lower_bound = 0
+            upper_bound = 1
+            column = 'score'
+        lower_bound = float(lower_bound)
+        upper_bound = float(upper_bound)
+        tmp = src_df[column].apply(lambda x: (x - lower_bound)/(upper_bound - lower_bound))
+        # tmp = src_df[column] + dst_db['score']
+
+        return tmp
 
     @staticmethod
     def get_category_top5(df, sort_by, ascending=False):
@@ -42,7 +87,7 @@ class Analyser(object):
                 result = pd.concat([result, df[df['e_type'] == e_type]
                                    .sort_values(sort_by, ascending=ascending).iloc[0:5]])
 
-        return result.sort_values(['e_type', sort_by], ascending=[not ascending, ascending]).to_string(index=False)
+        return result.sort_values(['e_type', sort_by], ascending=[not ascending, ascending])# .to_string(index=False)
 
     def compute_ambiguity(self):
         results = self.cursor.execute('SELECT type, entity FROM entities')
@@ -52,7 +97,7 @@ class Analyser(object):
         freq_df = freq_df.drop_duplicates()
         result_computed_location = self._compute_location_ambiguity(freq_df)
         result_computed_name = self._compute_name_ambiguity(result_computed_location)
-        return self.get_category_top5(result_computed_name, 'score')
+        return result_computed_name
 
     def _compute_location_ambiguity(self, df):
         location_df = df[df['e_type'] == 'Location']
@@ -95,7 +140,7 @@ class Analyser(object):
         return score
 
     def compute_frequency(self):
-        return self.get_category_top5(self._compute_frequency(), 'term_freq')
+        return self._compute_frequency()
 
     def _compute_frequency(self):
         results = self.cursor.execute('SELECT did, type, entity FROM entities')
@@ -147,4 +192,8 @@ class Analyser(object):
 
         base_df.loc[:, 'tf_idf'] = base_df['entity'].apply(lambda x: tf_idf_df['tf_idf'][x])
 
-        return self.get_category_top5(base_df, 'tf_idf')
+        return base_df
+
+if __name__ == '__main__':
+    a = Analyser('/Users/Sinderella/PycharmProjects/OSINT/db/20160124_203417')
+    a.analyse()
