@@ -17,6 +17,7 @@ class Analyser(object):
 
         self.google_api_url = "https://maps.googleapis.com/maps/api/geocode/json?address={}"
 
+        # https://developers.google.com/maps/documentation/geocoding/intro#Types
         self.location_score_chart = {
             'type_10': ['street_address', 'subpremise', 'airport', 'park', 'point_of_interest'],
             'type_9': ['intersection', 'neighborhood', 'premise', 'postal_code'],
@@ -34,48 +35,41 @@ class Analyser(object):
         tf_idf_df = self.compute_tf_idf()
         ambiguity_df = self.compute_ambiguity()
 
-        # combined_df['score'] = self.normalise(frequency_df, combined_df)
-        # combined_df['score'] = self.normalise(tf_idf_df, combined_df)
-        # combined_df['score'] = self.normalise(ambiguity_df, combined_df)
-
         combined_df = frequency_df.copy()
-        combined_df.rename(columns={2: 'score'}, inplace=True)
+        del combined_df['term_freq']
         combined_df['score'] = 0
-        combined_df['score'] = combined_df['score'] + self.normalise(frequency_df, combined_df)
-        combined_df['score'] = combined_df['score'] + self.normalise(tf_idf_df, combined_df)
-        combined_df['score'] = combined_df['score'] + self.normalise(ambiguity_df, combined_df)
+        combined_df = self.normalise_and_combine(frequency_df, combined_df)
+        combined_df = self.normalise_and_combine(tf_idf_df, combined_df)
+        combined_df = self.normalise_and_combine(ambiguity_df, combined_df)
 
         combined_df['score'] = combined_df['score'].apply(lambda x: x/3)
 
-        # print(self.normalise(tf_idf_df, combined_df))
         print(self.get_category_top5(combined_df, 'score'))
+
         # print('Frequency:\n{}'.format(self.compute_frequency()))
         # print('TF.IDF:\n{}'.format(self.compute_tf_idf()))
         # print('Ambiguity:\n{}'.format(self.compute_ambiguity()))
 
     @staticmethod
-    def normalise(src_df, dst_db):
+    def normalise_and_combine(src_df, dst_df):
         column = None
         lower_bound = 0
         upper_bound = 0
         if 'term_freq' in src_df.columns:
-            lower_bound = src_df['term_freq'].idxmin()
-            upper_bound = src_df['term_freq'].idxmax()
             column = 'term_freq'
         elif 'tf_idf' in src_df.columns:
-            lower_bound = 0
-            upper_bound = 1
             column = 'tf_idf'
         elif 'score' in src_df.columns:
-            lower_bound = 0
-            upper_bound = 1
             column = 'score'
-        lower_bound = float(lower_bound)
-        upper_bound = float(upper_bound)
-        tmp = src_df[column].apply(lambda x: (x - lower_bound)/(upper_bound - lower_bound))
-        # tmp = src_df[column] + dst_db['score']
-
-        return tmp
+        lower_bound = float(src_df[column].min())
+        upper_bound = float(src_df[column].max())
+        src_df[column] = src_df[column].apply(lambda x: (x - lower_bound)/(upper_bound - lower_bound))
+        src_df.rename(columns={column: 'score'}, inplace=True)
+        output = pd.merge(dst_df, src_df, on=["e_type", "entity"])
+        output['score'] = output['score_x'] + output['score_y']
+        del output['score_x']
+        del output['score_y']
+        return output
 
     @staticmethod
     def get_category_top5(df, sort_by, ascending=False):
@@ -87,13 +81,13 @@ class Analyser(object):
                 result = pd.concat([result, df[df['e_type'] == e_type]
                                    .sort_values(sort_by, ascending=ascending).iloc[0:5]])
 
-        return result.sort_values(['e_type', sort_by], ascending=[not ascending, ascending])# .to_string(index=False)
+        return result.sort_values(['e_type', sort_by], ascending=[not ascending, ascending], ).to_string(index=False)
 
     def compute_ambiguity(self):
         results = self.cursor.execute('SELECT type, entity FROM entities')
         tmp = results.fetchall()
         freq_df = DataFrame(tmp, columns=['e_type', 'entity'])
-        freq_df['score'] = np.nan
+        freq_df['score'] = 1
         freq_df = freq_df.drop_duplicates()
         result_computed_location = self._compute_location_ambiguity(freq_df)
         result_computed_name = self._compute_name_ambiguity(result_computed_location)
