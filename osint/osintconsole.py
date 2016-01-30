@@ -32,6 +32,9 @@ class Console(cmd.Cmd):
 
         self.INPUT_PARAMS = ['FIRST_NAME', 'LAST_NAME', 'EMAIL', 'USERNAME', 'FACEBOOK', 'LINKEDIN']
         self.SHOW_PARAMS = ['params', 'options', 'info']
+
+        self.queries = []
+
         self.url_queue = WorkerQueue()
         self.extract_queue = WorkerQueue()
         self.result = Person()
@@ -68,7 +71,7 @@ class Console(cmd.Cmd):
             extractor.put((document_id, path_to_html))
 
     def analyse(self):
-        analyser = Analyser(self.cur_db_name)
+        analyser = Analyser(self.cur_db_name, self.queries)
         analyser.analyse()
         # # TODO: analyse the extracted entities
         # try:
@@ -148,7 +151,7 @@ class Console(cmd.Cmd):
         self.cur_db.commit()
 
         print("[*] Started scraping websites...")
-        scraper = Scraper(self.cur_db_name, self.lock)
+        scraper = Scraper(self.cur_db_name, self.lock, self.queries)
         scraper.start()
 
         # TODO: build queries based on input, permute through all inputs with full name
@@ -160,6 +163,7 @@ class Console(cmd.Cmd):
                 emails = [self.params['EMAIL']]
             for email in emails:
                 results = self.mgr.map(filter_func, query_source, 'google', "\"" + email + "\"")
+                self.queries.append(email)
                 for result in results:
                     [scraper.put(url) for url in result.result['urls']]
                     # [self.url_queue.put(url) for url in result.result['urls']]
@@ -176,6 +180,7 @@ class Console(cmd.Cmd):
             full_name = self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']
             # insert_entity(self.cur_db_cursor, None, full_name, 'Name')
             results = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
+            self.queries.append(full_name)
             for result in results:
                 [scraper.put(url) for url in result.result['urls']]
                 # [self.url_queue.put(url) for url in result.result['urls']]
