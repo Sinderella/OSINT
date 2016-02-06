@@ -1,18 +1,17 @@
 import codecs
-import os
-
-import pandas as pd
-import numpy as np
-import sqlite3
 import json
+import sqlite3
 
-from pandas import DataFrame, Series
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+from pandas import DataFrame
 
 from osint.utils.requesters import Requester
 
 
 class Analyser(object):
-    def __init__(self, db_name, queries):
+    def __init__(self, db_name, queries=None):
         super(Analyser, self).__init__()
         self.db_name = db_name
         self.cur_db = sqlite3.connect(self.db_name + '/documents.db')
@@ -34,46 +33,51 @@ class Analyser(object):
             'type_3': ['country']}
 
     def analyse(self):
+        queries = []
+        for row in self.cursor.execute("SELECT type, keyword FROM keywords"):
+            queries.append(row[1])
+        if self.queries is None:
+            self.queries = queries
+        else:
+            self.queries = list(set(self.queries + queries))
+
         combined_df = DataFrame(columns=['e_type', 'entity', 'score'])
 
         frequency_df = self.compute_frequency()
         consistency_df = self.compute_consistency()
-        tf_idf_df = self.compute_tf_idf()
+        tf_idf_queries_df = self.compute_tf_idf_queries()
         ambiguity_df = self.compute_ambiguity()
 
         combined_df = frequency_df.copy()
         del combined_df['term_freq']
         combined_df['score'] = 0
-        combined_df = self.normalise_and_combine(frequency_df, combined_df)
-        combined_df = self.normalise_and_combine(consistency_df, combined_df)
-        combined_df = self.normalise_and_combine(tf_idf_df, combined_df)
-        combined_df = self.normalise_and_combine(ambiguity_df, combined_df)
+        combined_df = self.combine(self.normalise(frequency_df), combined_df)
+        combined_df = self.combine(self.normalise(consistency_df), combined_df)
+        combined_df = self.combine(self.normalise(tf_idf_queries_df), combined_df)
+        combined_df = self.combine(self.normalise(ambiguity_df), combined_df)
 
         combined_df['score'] = combined_df['score'].apply(lambda x: x / 4)
 
         print(self.get_category_top5(combined_df, 'score'))
 
     @staticmethod
-    def normalise_and_combine(src_df, dst_df):
-        column = None
-        lower_bound = 0
-        upper_bound = 0
-        if 'term_freq' in src_df.columns:
-            column = 'term_freq'
-        elif 'term_cons' in src_df.columns:
-            column = 'term_cons'
-        elif 'tf_idf' in src_df.columns:
-            column = 'tf_idf'
-        elif 'score' in src_df.columns:
-            column = 'score'
+    def normalise(src_df):
+        column = src_df.columns[2]
         lower_bound = float(src_df[column].min())
         upper_bound = float(src_df[column].max())
         src_df[column] = src_df[column].apply(lambda x: (x - lower_bound) / (upper_bound - lower_bound))
+
+        return src_df
+
+    @staticmethod
+    def combine(src_df, dst_df):
+        column = src_df.columns[2]
         src_df.rename(columns={column: 'score'}, inplace=True)
         output = pd.merge(dst_df, src_df, on=["e_type", "entity"])
         output['score'] = output['score_x'] + output['score_y']
         del output['score_x']
         del output['score_y']
+
         return output
 
     @staticmethod
@@ -169,6 +173,49 @@ class Analyser(object):
         tmp = results.fetchone()
         total_doc = tmp[0]
 
+        results = self.cursor.execute('SELECT did, type, entity FROM entities')
+        tmp = results.fetchall()
+        df = DataFrame(tmp, columns=['did', 'e_type', 'entity'])
+
+        base_df = df[['e_type', 'entity']]
+        base_df = base_df.drop_duplicates()
+
+        doc_t_df = df.drop_duplicates().groupby('entity').size()
+
+        results = self.cursor.execute('SELECT did, total_word FROM documents')
+        tmp = results.fetchall()
+        df2 = DataFrame(tmp, columns=['did', 'total_word'])
+
+        tmp = df[['did', 'entity']].groupby(['did', 'entity']).size().reset_index()
+        tmp.rename(columns={0: 'term_freq'}, inplace=True)
+
+        tf_idf_list = []
+
+        for row in tmp.iterrows():
+            values = row[1]
+            did = values[0]
+            entity = values[1]
+            term_freq = values[2]
+            total_word = df2[df2['did'] == did]['total_word'].get_values()[0]
+            tf = float(term_freq) / total_word
+            doc_t = doc_t_df.get_value(entity)
+            idf = np.log(total_doc / doc_t)
+            tf_idf = tf * idf
+            tf_idf_list.append([entity, tf_idf])
+
+        tf_idf_df = DataFrame(tf_idf_list, columns=['entity', 'tf_idf'])
+        tf_idf_df = tf_idf_df.groupby('entity').agg('sum')
+
+        base_df.loc[:, 'tf_idf'] = base_df['entity'].apply(lambda x: tf_idf_df['tf_idf'][x])
+
+        return base_df
+
+    def compute_tf_idf_queries(self):
+        # Find total number of document
+        results = self.cursor.execute('SELECT seq FROM sqlite_sequence WHERE name=\'{}\''.format('documents'))
+        tmp = results.fetchone()
+        total_doc = tmp[0]
+
         results = self.cursor.execute('SELECT did, total_word, path FROM documents')
         tmp = results.fetchall()
         documents_df = DataFrame(tmp, columns=['did', 'total_word', 'path'])
@@ -184,7 +231,7 @@ class Analyser(object):
             with codecs.open(path, 'rt') as f:
                 text = f.read()
                 for query in self.queries:
-                    if query in text:
+                    if query in text.decode('utf-8'):
                         no_docterm[query] += 1
 
         for query in self.queries:
@@ -195,7 +242,7 @@ class Analyser(object):
                 with codecs.open(path, 'rt') as f:
                     text = f.read()
 
-                tf_idf = self._compute_tf_idf(text, total_word, total_doc, no_docterm[query])
+                tf_idf = self._compute_tf_idf_queries(text, total_word, total_doc, no_docterm[query])
                 cur_tf_idf = documents_df.get_value(index, 'tf_idf')
                 documents_df.set_value(index, 'tf_idf', cur_tf_idf + tf_idf)
 
@@ -213,22 +260,35 @@ class Analyser(object):
         df = df.groupby(['e_type', 'entity']).sum().reset_index()
         return df
 
-    def _compute_tf_idf(self, text, total_word, total_doc, no_docterm):
-        tf = self._compute_tf(text, total_word)
-        idf = self._compute_idf(total_doc, no_docterm)
+    def _compute_tf_idf_queries(self, text, total_word, total_doc, no_docterm):
+        tf = self._compute_tf_queries(text, total_word)
+        idf = self._compute_idf_queries(total_doc, no_docterm)
         return tf * idf
 
-    def _compute_tf(self, text, total_word):
+    def _compute_tf_queries(self, text, total_word):
         term_freq = 0
         for query in self.queries:
-            term_freq += text.count(query)
+            term_freq += text.decode('utf-8').count(query)
 
         return float(term_freq) / total_word
 
-    def _compute_idf(self, total_doc, no_docterm):
+    def _compute_idf_queries(self, total_doc, no_docterm):
         return np.log(float(total_doc) / no_docterm)
 
 
 if __name__ == '__main__':
-    a = Analyser('/Users/Sinderella/PycharmProjects/OSINT/db/20160124_203417', ['Thanat Sirithawornsant'])
+    a = Analyser('/Users/Sinderella/PycharmProjects/OSINT/db/20160206_155954')
+    # plt.matplotlib.style.use('ggplot')
     a.analyse()
+    # ts = pd.merge(Analyser.normalise(a.compute_consistency()), Analyser.normalise(a.compute_frequency()))
+    # ts = pd.merge(ts, Analyser.normalise(a.compute_tf_idf_queries()))
+    # plt.scatter(ts['term_cons'], ts['tf_idf'])
+    # plt.show()
+    # fig = plt.figure()
+    # ax1 = fig.add_subplot(2, 2, 1)
+    # ax1.hist(a.compute_frequency())
+    # ax2 = fig.add_subplot(2, 2, 2)
+    # ax1.hist(a.compute_consistency())
+    # ax3 = fig.add_subplot(2, 2, 3)
+    # ax3.hist(a.compute_tf_idf())
+    # ax4 = fig.add_subplot(2, 2, 4)
