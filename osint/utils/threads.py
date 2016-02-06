@@ -140,9 +140,6 @@ class Extractor(ProcessBase):
 
     @staticmethod
     def _extract_email(text):
-        # results = re.findall(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.(?!PNG|JPG|JS|GIF)[A-Z]{2,}', text, flags=re.IGNORECASE)
-        # results = re.findall(r'^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$', text, flags=re.IGNORECASE)
-        # TODO: find a better regex
         results = re.findall(r'[a-z0-9\.]+@[a-z0-9\.]+\.[a-z]{2,}', text, flags=re.IGNORECASE)
         return set(results)
 
