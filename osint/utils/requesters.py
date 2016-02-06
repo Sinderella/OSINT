@@ -1,6 +1,4 @@
-from cookielib import CookieJar
-
-from requests import Session
+from requests import Session, adapters
 
 
 class Requester(object):
@@ -10,7 +8,10 @@ class Requester(object):
         }
         self.session = Session()
         self.session.headers.update(self.headers)
-        self.cookie_jar = CookieJar()
+
+        max_retries_adapter = adapters.HTTPAdapter(max_retries=5)
+        self.session.mount('http://', max_retries_adapter)
+        self.session.mount('https://', max_retries_adapter)
 
     def get(self, url):
         return self.session.get(url)
