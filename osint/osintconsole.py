@@ -14,6 +14,7 @@ from stevedore import dispatch
 
 from osint.models.person import Person
 from osint.utils.analyser import Analyser
+from osint.utils.db_helpers import insert_keyword
 from osint.utils.queues import WorkerQueue
 from osint.utils.threads import Scraper, Extractor
 from utils.parsers import param_parser
@@ -23,14 +24,15 @@ class Console(cmd.Cmd):
     def __init__(self):
         cmd.Cmd.__init__(self)
         self.mgr = dispatch.DispatchExtensionManager(
-                'osint.plugins.source',
-                lambda *args, **kwds: True,
-                invoke_on_load=True,
+            'osint.plugins.source',
+            lambda *args, **kwds: True,
+            invoke_on_load=True,
         )
         self.intro = "Loaded " + str(len(self.mgr.extensions)) + " modules"
         self.prompt = "osint$ "
 
-        self.INPUT_PARAMS = ['FIRST_NAME', 'LAST_NAME', 'EMAIL', 'USERNAME', 'FACEBOOK', 'LINKEDIN']
+        self.INPUT_PARAMS = ['Name', 'Email', 'Phone', 'Image', 'URL', 'Education', 'Job', 'User ID', 'Organisation',
+                             'Location']
         self.SHOW_PARAMS = ['params', 'options', 'info']
 
         self.queries = []
@@ -73,35 +75,6 @@ class Console(cmd.Cmd):
     def analyse(self):
         analyser = Analyser(self.cur_db_name, self.queries)
         analyser.analyse()
-        # # TODO: analyse the extracted entities
-        # try:
-        #     cur_db = sqlite3.connect(self.cur_db_name + '/documents.db')
-        # except sqlite3.Error as e:
-        #     print("[!] An error occurred: {}".format(e.args[0]))
-        #     return
-        # cur_db_cursor = cur_db.cursor()
-        # entities = {}
-        # results = cur_db_cursor.execute('SELECT type FROM entity_types')
-        # for result in results:
-        #     entities[result[0]] = {}
-        #
-        # results = cur_db_cursor.execute('SELECT type, entity FROM entities')
-        # for result in results:
-        #     entity_type = result[0]
-        #     entity = result[1]
-        #     if entity in entities.get(entity_type):
-        #         entities[entity_type][entity] = entities.get(entity_type).get(entity) + 1
-        #     elif entities.get(entity_type) is not None:
-        #         entities[entity_type][entity] = 1
-        #
-        # # rank by frequency
-        # for entity_type in entities:
-        #     entities[entity_type] = sorted(entities.get(entity_type).items(), key=operator.itemgetter(1), reverse=True)
-        # # print out the entities
-        # for entity_type in entities:
-        #     print("{}:".format(entity_type))
-        #     for entity in entities[entity_type]:
-        #         print("[{0}] {1}".format(entity[1], entity[0].encode('utf-8')))
 
     def do_analyse(self, params):
         self.analyse()
@@ -112,23 +85,15 @@ class Console(cmd.Cmd):
     def do_reload(self, params):
         del self.mgr
         self.mgr = dispatch.DispatchExtensionManager(
-                'osint.plugins.source',
-                lambda *args, **kwds: True,
-                invoke_on_load=True,
+            'osint.plugins.source',
+            lambda *args, **kwds: True,
+            invoke_on_load=True,
         )
         print(self.intro)
 
-    def do_run(self, params):
-        """run
-        Gather information from different sources using supplied information.
-        """
-
-        def filter_func(ext, extension_name, *args, **kwargs):
-            return ext.name == extension_name
-
-        def query_source(ext, extension_name, data, *args, **kwargs):
-            ext.obj.query = data
-            return ext.obj.get_result()
+    def precmd(self, line):
+        if self.cur_db_name:
+            return line
 
         try:
             os.mkdir('./db')
@@ -150,22 +115,44 @@ class Console(cmd.Cmd):
         self.cur_db.executescript(types)
         self.cur_db.commit()
 
+        return line
+
+    def do_run(self, params):
+        """run
+        Gather information from different sources using supplied information.
+        """
+
+        def filter_func(ext, extension_name, *args, **kwargs):
+            return ext.name == extension_name
+
+        def query_source(ext, extension_name, data, *args, **kwargs):
+            ext.obj.query = data
+            return ext.obj.get_result()
+
         print("[*] Started scraping websites...")
-        scraper = Scraper(self.cur_db_name, self.lock, self.queries)
+        scraper = Scraper(self.cur_db_name, self.lock)
         scraper.start()
 
         # TODO: build queries based on input, permute through all inputs with full name
-        # TODO: insert inputs as entities
-        if 'EMAIL' in self.params:
-            if ',' in self.params['EMAIL']:
-                emails = self.params['EMAIL'].split[',']
-            else:
-                emails = [self.params['EMAIL']]
-            for email in emails:
-                results = self.mgr.map(filter_func, query_source, 'google', "\"" + email + "\"")
-                self.queries.append(email)
-                for result in results:
-                    [scraper.put(url) for url in result.result['urls']]
+        cur_db_cursor = self.cur_db.cursor()
+        for row in cur_db_cursor.execute('SELECT type, keyword FROM keywords'):
+            keyword_type = row[0]
+            keyword = row[1]
+            results = self.mgr.map(filter_func, query_source, 'google', "\"" + keyword + "\"")
+            self.queries.append(keyword)
+            for result in results:
+                [scraper.put(url) for url in result.result['urls']]
+
+        # if 'EMAIL' in self.params:
+        #     if ',' in self.params['EMAIL']:
+        #         emails = self.params['EMAIL'].split[',']
+        #     else:
+        #         emails = [self.params['EMAIL']]
+        #     for email in emails:
+        #         results = self.mgr.map(filter_func, query_source, 'google', "\"" + email + "\"")
+        #         self.queries.append(email)
+        #         for result in results:
+        #             [scraper.put(url) for url in result.result['urls']]
                     # [self.url_queue.put(url) for url in result.result['urls']]
                     # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + email + "\"")
                     # for result in results:
@@ -176,13 +163,12 @@ class Console(cmd.Cmd):
                     # for person in persons:
                     #     self.result.add_person(person)
 
-        if 'FIRST_NAME' in self.params and 'LAST_NAME' in self.params:
-            full_name = self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']
-            # insert_entity(self.cur_db_cursor, None, full_name, 'Name')
-            results = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
-            self.queries.append(full_name)
-            for result in results:
-                [scraper.put(url) for url in result.result['urls']]
+        # if 'FIRST_NAME' in self.params and 'LAST_NAME' in self.params:
+        #     full_name = self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']
+        #     results = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
+        #     self.queries.append(full_name)
+        #     for result in results:
+        #         [scraper.put(url) for url in result.result['urls']]
                 # [self.url_queue.put(url) for url in result.result['urls']]
                 # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + full_name + "\"")
                 # for result in results:
@@ -229,12 +215,14 @@ class Console(cmd.Cmd):
         #
         key = argv[0]
         if argc > 1:
-            value = ''.join(argv[1:])
+            value = ' '.join(argv[1:])
         else:
             value = ""
         if key and key in self.INPUT_PARAMS:
-            print(key + '=> ' + value)
+            print(key + ' => ' + value)
             self.params[key] = value
+            insert_keyword(self.cur_db_cursor, key, value)
+            self.cur_db.commit()
         else:
             self.do_help('set')
 
