@@ -41,24 +41,23 @@ class Analyser(object):
         else:
             self.queries = list(set(self.queries + queries))
 
-        combined_df = DataFrame(columns=['e_type', 'entity', 'score'])
-
-        frequency_df = self.compute_frequency()
+        # frequency_df = self.compute_frequency()
         consistency_df = self.compute_consistency()
         tf_idf_queries_df = self.compute_tf_idf_queries()
         ambiguity_df = self.compute_ambiguity()
 
-        combined_df = frequency_df.copy()
-        del combined_df['term_freq']
-        combined_df['score'] = 0
-        combined_df = self.combine(self.normalise(frequency_df), combined_df)
+        # columns=['e_type', 'entity', 'avg_score'])
+        combined_df = consistency_df.copy()
+        del combined_df['term_cons']
+        combined_df['avg_score'] = 0
+        # combined_df = self.combine(self.normalise(frequency_df), combined_df)
         combined_df = self.combine(self.normalise(consistency_df), combined_df)
         combined_df = self.combine(self.normalise(tf_idf_queries_df), combined_df)
         combined_df = self.combine(self.normalise(ambiguity_df), combined_df)
 
-        combined_df['score'] = combined_df['score'].apply(lambda x: x / 4)
+        combined_df['avg_score'] = combined_df['avg_score'].apply(lambda x: x / 3)
 
-        print(self.get_category_top5(combined_df, 'score'))
+        print(self.get_category_top5(combined_df, 'tf_idf'))
 
     @staticmethod
     def normalise(src_df):
@@ -72,11 +71,11 @@ class Analyser(object):
     @staticmethod
     def combine(src_df, dst_df):
         column = src_df.columns[2]
-        src_df.rename(columns={column: 'score'}, inplace=True)
+        src_df['avg_score'] = src_df[column]
         output = pd.merge(dst_df, src_df, on=["e_type", "entity"])
-        output['score'] = output['score_x'] + output['score_y']
-        del output['score_x']
-        del output['score_y']
+        output['avg_score'] = output['avg_score_x'] + output['avg_score_y']
+        del output['avg_score_x']
+        del output['avg_score_y']
 
         return output
 
@@ -90,13 +89,14 @@ class Analyser(object):
                 result = pd.concat([result, df[df['e_type'] == e_type]
                                    .sort_values(sort_by, ascending=ascending).iloc[0:5]])
 
-        return result.sort_values(['e_type', sort_by], ascending=[not ascending, ascending], ).to_string(index=False)
+        return result.sort_values(['e_type', sort_by], ascending=[not ascending, ascending], )[
+            ['e_type', 'entity', 'avg_score', 'term_cons', 'ambiguity']].to_string(index=False)
 
     def compute_ambiguity(self):
         results = self.cursor.execute('SELECT type, entity FROM entities')
         tmp = results.fetchall()
         freq_df = DataFrame(tmp, columns=['e_type', 'entity'])
-        freq_df['score'] = 1
+        freq_df['ambiguity'] = 1
         freq_df = freq_df.drop_duplicates()
         result_computed_location = self._compute_location_ambiguity(freq_df)
         result_computed_name = self._compute_name_ambiguity(result_computed_location)
@@ -115,7 +115,7 @@ class Analyser(object):
             location_types = api_result['results'][0]['address_components'][0]['types']
             location_score = max(self.__measure_location_ambiguity(location_type) for location_type in location_types)
             location_index = location_se[location_se == location_name].index[0]
-            df.set_value(location_index, 'score', location_score)
+            df.set_value(location_index, 'ambiguity', location_score)
         return df
 
     def __measure_location_ambiguity(self, location):
@@ -132,7 +132,7 @@ class Analyser(object):
         for name_name in name_se.get_values():
             name_score = self.__compute_name_ambiguity(name_name)
             name_index = name_se[name_se == name_name].index[0]
-            df.set_value(name_index, 'score', name_score)
+            df.set_value(name_index, 'ambiguity', name_score)
         return df
 
     @staticmethod
@@ -274,6 +274,9 @@ class Analyser(object):
 
     def _compute_idf_queries(self, total_doc, no_docterm):
         return np.log(float(total_doc) / no_docterm)
+
+    def compute_noise(self):
+        return
 
 
 if __name__ == '__main__':
