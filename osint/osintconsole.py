@@ -72,12 +72,14 @@ class Console(cmd.Cmd):
             path_to_html = result[1]
             extractor.put((document_id, path_to_html))
 
-    def analyse(self):
-        analyser = Analyser(self.cur_db_name, self.queries)
+    def analyse(self, expected_types):
+        analyser = Analyser(self.cur_db_name, self.queries, expected_types)
         analyser.analyse()
 
     def do_analyse(self, params):
-        self.analyse()
+        argc, argv = param_parser(params)
+        expected_types = [expected_type.strip() for expected_type in argv[1].split(',')]
+        self.analyse(expected_types)
 
     def do_extract(self, params):
         self.extract_info()

@@ -5,19 +5,20 @@ import sqlite3
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from pandas import DataFrame
+from pandas import DataFrame, Series
 
 from osint.utils.requesters import Requester
 
 
 class Analyser(object):
-    def __init__(self, db_name, queries=None):
+    def __init__(self, db_name, queries=None, expected_types=None):
         super(Analyser, self).__init__()
         self.db_name = db_name
         self.cur_db = sqlite3.connect(self.db_name + '/documents.db')
         self.cursor = self.cur_db.cursor()
 
         self.queries = queries
+        self.expected_types = expected_types
 
         self.google_api_url = "https://maps.googleapis.com/maps/api/geocode/json?address={}"
 
@@ -48,16 +49,17 @@ class Analyser(object):
 
         # columns=['e_type', 'entity', 'avg_score'])
         combined_df = consistency_df.copy()
-        del combined_df['term_cons']
+        del combined_df['consistency']
         combined_df['avg_score'] = 0
         # combined_df = self.combine(self.normalise(frequency_df), combined_df)
         combined_df = self.combine(self.normalise(consistency_df), combined_df)
         combined_df = self.combine(self.normalise(tf_idf_queries_df), combined_df)
         combined_df = self.combine(self.normalise(ambiguity_df), combined_df)
 
-        combined_df['avg_score'] = combined_df['avg_score'].apply(lambda x: x / 3)
+        combined_df['avg_score'] = combined_df['avg_score'].apply(lambda x: x / 2)
 
         print(self.get_category_top5(combined_df, 'tf_idf'))
+        print(self.compute_summary(combined_df))
 
     @staticmethod
     def normalise(src_df):
@@ -90,7 +92,7 @@ class Analyser(object):
                                    .sort_values(sort_by, ascending=ascending).iloc[0:5]])
 
         return result.sort_values(['e_type', sort_by], ascending=[not ascending, ascending], )[
-            ['e_type', 'entity', 'avg_score', 'term_cons', 'ambiguity']].to_string(index=False)
+            ['e_type', 'entity', 'avg_score', 'consistency', 'ambiguity']].to_string(index=False)
 
     def compute_ambiguity(self):
         results = self.cursor.execute('SELECT type, entity FROM entities')
@@ -163,7 +165,7 @@ class Analyser(object):
         df = DataFrame(tmp, columns=['did', 'e_type', 'entity'])
         df = df.drop_duplicates()
         tmp = df.groupby(['e_type', 'entity']).size().reset_index()
-        tmp.rename(columns={0: 'term_cons'}, inplace=True)
+        tmp.rename(columns={0: 'consistency'}, inplace=True)
 
         return tmp
 
@@ -276,16 +278,37 @@ class Analyser(object):
         return np.log(float(total_doc) / no_docterm)
 
     def compute_noise(self):
-        return
+        result = self.cursor.execute('SELECT seq FROM sqlite_sequence WHERE name=\'{}\''.format('entities'))
+        total_entity = result.fetchone()[0]
+
+        expected_type_total = 0.0
+        for expected_type in self.expected_types:
+            result = self.cursor.execute(
+                'SELECT count(*) FROM entities WHERE type=\'{}\''.format(expected_type.title()))
+            expected_type_count = result.fetchone()[0]
+            expected_type_total += expected_type_count
+
+        return 1 - (expected_type_total / total_entity)
+
+    def compute_summary(self, combined_df):
+        combined_mean = combined_df.mean()
+        average_cons = combined_mean['consistency']
+        average_ambi = combined_mean['ambiguity']
+        noise = self.compute_noise()
+
+        series = Series([average_cons, average_ambi, noise])
+        series.index = ['Average Consistency', 'Average Ambiguity', 'Noise']
+
+        return series
 
 
 if __name__ == '__main__':
-    a = Analyser('/Users/Sinderella/PycharmProjects/OSINT/db/20160206_155954')
+    a = Analyser('/Users/Sinderella/PycharmProjects/OSINT/db/20160206_155954', ['Thanat Sirithawornsant'], ['location'])
     # plt.matplotlib.style.use('ggplot')
     a.analyse()
     # ts = pd.merge(Analyser.normalise(a.compute_consistency()), Analyser.normalise(a.compute_frequency()))
     # ts = pd.merge(ts, Analyser.normalise(a.compute_tf_idf_queries()))
-    # plt.scatter(ts['term_cons'], ts['tf_idf'])
+    # plt.scatter(ts['consistency'], ts['tf_idf'])
     # plt.show()
     # fig = plt.figure()
     # ax1 = fig.add_subplot(2, 2, 1)
