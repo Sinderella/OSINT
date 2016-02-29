@@ -72,9 +72,13 @@ class Console(cmd.Cmd):
             path_to_html = result[1]
             extractor.put((document_id, path_to_html))
 
-    def analyse(self, expected_types):
+        return extractor
+
+    def analyse(self, expected_types=None):
         analyser = Analyser(self.cur_db_name, self.queries, expected_types)
-        analyser.analyse()
+        analyser.start()
+
+        return analyser
 
     def do_analyse(self, params):
         argc, argv = param_parser(params)
@@ -82,10 +86,10 @@ class Console(cmd.Cmd):
             print("Please provide what you're looking for (e.g. name, location, ...)")
             return
         expected_types = [expected_type.strip() for expected_type in argv[0].split(',')]
-        self.analyse(expected_types)
+        return self.analyse(expected_types)
 
     def do_extract(self, params):
-        self.extract_info()
+        return self.extract_info()
 
     def do_reload(self, params):
         del self.mgr
@@ -143,10 +147,13 @@ class Console(cmd.Cmd):
         for row in cur_db_cursor.execute('SELECT type, keyword FROM keywords'):
             keyword_type = row[0]
             keyword = row[1]
-            results = self.mgr.map(filter_func, query_source, 'google', "\"" + keyword + "\"")
-            self.queries.append(keyword)
-            for result in results:
-                [scraper.put(url) for url in result.result['urls']]
+            for plugin in ['google', 'bing']:
+                results = self.mgr.map(filter_func, query_source, plugin, "\"" + keyword + "\"")
+                self.queries.append(keyword)
+                for result in results:
+                    [scraper.put(url) for url in result.result['urls']]
+
+        return scraper
 
         # if 'EMAIL' in self.params:
         #     if ',' in self.params['EMAIL']:
@@ -223,6 +230,7 @@ class Console(cmd.Cmd):
             value = ' '.join(argv[1:])
         else:
             value = ""
+        value = value.lower()
         if key and key in self.INPUT_PARAMS:
             print(key + ' => ' + value)
             self.params[key] = value
@@ -237,7 +245,7 @@ class Console(cmd.Cmd):
         else:
             completions = [f
                            for f in self.INPUT_PARAMS
-                           if f.startswith(text.upper())]
+                           if f.startswith(text.title())]
         return completions
 
     def do_show(self, params):
