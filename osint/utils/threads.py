@@ -1,6 +1,8 @@
 import codecs
 import hashlib
 import re
+from urllib import quote
+
 import phonenumbers
 from threading import Thread, Timer, Event
 
@@ -8,6 +10,9 @@ import sqlite3
 
 import time
 from bs4 import BeautifulSoup
+from requests.exceptions import ContentDecodingError
+
+from osint.utils.cleaners import EntityCleaner
 from osint.utils.db_helpers import insert_entity
 from requests import ConnectionError
 
@@ -30,6 +35,7 @@ class ProcessBase(Thread):
         if not self.added:
             return
         self._update_progress()
+        # TODO: bug
         Timer(120, self.timer).start()
 
     def put(self, item):
@@ -74,6 +80,9 @@ class Scraper(ProcessBase):
         req = Requester()
         try:
             res = req.get(url)
+        except ContentDecodingError as e:
+            print("Error at saving html: {0}\nURL: {1}".format(e.message, url))
+            return
         except ConnectionError:
             return
         soup = BeautifulSoup(res.content, 'html.parser')
@@ -85,16 +94,22 @@ class Scraper(ProcessBase):
         with codecs.open(self.db_name + '/' + hash_filename + '.html', 'w', encoding='utf8') as fp:
             fp.write(raw_text)
         cur_db_cursor = self.cur_db.cursor()
-        cur_db_cursor.execute("""
-        insert into documents (url, total_word, path)
-        values ('{}', {}, '{}')
-        """.format(url, total_word, self.db_name + '/' + hash_filename + '.html'))
-        self.cur_db.commit()
+        try:
+            cur_db_cursor.execute("""
+            insert into documents (url, total_word, path)
+            values ('{}', {}, '{}')
+            """.format(quote(url), total_word, self.db_name + '/' + hash_filename + '.html'))
+            self.cur_db.commit()
+        except sqlite3.OperationalError as e:
+            print("Error: {0}\nURL: {1}\nTotal Words: {2}\nPath: {3}".format(e.message, url, total_word, hash_filename))
+        except sqlite3.IntegrityError:
+            pass
 
 
 class Extractor(ProcessBase):
     def __init__(self, db_name, lock):
         super(Extractor, self).__init__("document", lock)
+        self.entity_cleaner = EntityCleaner()
         self.db_name = db_name
         self.cur_db = None
 
@@ -116,26 +131,34 @@ class Extractor(ProcessBase):
                 self.cur_db.close()
                 break
 
+    def clean_insert_entity(self, cursor, doc_id, entity, entity_type):
+        cleaned_entity = self.entity_cleaner.clean(entity)
+        if cleaned_entity is None:
+            return
+        insert_entity(cursor, doc_id, cleaned_entity, entity_type)
+
     def extract_insert_info(self, document_id, path_to_html):
         cur_db_cursor = self.cur_db.cursor()
         with codecs.open(path_to_html, 'rt', encoding='utf8') as fp:
             raw_text = fp.read()
         extracted_emails = self._extract_email(raw_text)
         for email in extracted_emails:
-            insert_entity(cur_db_cursor, document_id, email, 'Email')
+            if email.endswith('.png') or email.endswith('.gif'):
+                continue
+            self.clean_insert_entity(cur_db_cursor, document_id, email, 'Email')
 
         extracted_phone_nos = self._extract_phone_no(raw_text)
         for phone_no in extracted_phone_nos:
-            insert_entity(cur_db_cursor, document_id, phone_no, 'Phone')
+            self.clean_insert_entity(cur_db_cursor, document_id, phone_no, 'Phone')
         # extract using NLP
         entities = html_ner(raw_text)
         for tag, data in entities:
             if tag == 'PERSON':
-                insert_entity(cur_db_cursor, document_id, data, 'Name')
+                self.clean_insert_entity(cur_db_cursor, document_id, data, 'Name')
             elif tag == 'ORGANIZATION':
-                insert_entity(cur_db_cursor, document_id, data, 'Organisation')
+                self.clean_insert_entity(cur_db_cursor, document_id, data, 'Organisation')
             elif tag == 'LOCATION':
-                insert_entity(cur_db_cursor, document_id, data, 'Location')
+                self.clean_insert_entity(cur_db_cursor, document_id, data, 'Location')
         self.cur_db.commit()
 
     @staticmethod
