@@ -78,7 +78,10 @@ class Console(cmd.Cmd):
 
     def do_analyse(self, params):
         argc, argv = param_parser(params)
-        expected_types = [expected_type.strip() for expected_type in argv[1].split(',')]
+        if argc == 0:
+            print("Please provide what you're looking for (e.g. name, location, ...)")
+            return
+        expected_types = [expected_type.strip() for expected_type in argv[0].split(',')]
         self.analyse(expected_types)
 
     def do_extract(self, params):
