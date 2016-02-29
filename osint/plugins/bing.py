@@ -12,7 +12,7 @@ class Bing(base.SourceBase):
     def __init__(self):
         super(Bing, self).__init__()
         self.web_requester = Requester()
-        self.url = 'https://www.bing.com/search?q={}'
+        self.url = 'https://www.bing.com/search?q={}&first={}'
         self._query = None
 
     @property
@@ -25,8 +25,9 @@ class Bing(base.SourceBase):
 
     def get_result(self):
         result = Result('Bing')
-        response = self.web_requester.get(self.url.format(self.query))
-        soup = BeautifulSoup(response.content, "html.parser")
-        links = [x['href'] for x in soup.select('li.b_algo h2 a')]
-        result.add_urls(links)
+        for n in range(1, 21, 10):
+            response = self.web_requester.get(self.url.format(self.query, n))
+            soup = BeautifulSoup(response.content, "html.parser")
+            links = [x['href'] for x in soup.select('li.b_algo h2 a')]
+            result.add_urls(links)
         return result
