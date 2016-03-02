@@ -23,7 +23,9 @@ class Analyser(Thread):
         if self.expected_types is None:
             self.expected_types = ["location", "name", "organisation"]
 
-        self.google_api_url = "https://maps.googleapis.com/maps/api/geocode/json?address={}"
+        self.google_api_key = ""
+        self.google_api_url = "https://maps.googleapis.com/maps/api/geocode/json?key={0}&address={1}".format(
+            self.google_api_key, '{}')
 
         # https://developers.google.com/maps/documentation/geocoding/intro#Types
         self.location_score_chart = {
@@ -87,7 +89,10 @@ class Analyser(Thread):
         column = src_df.columns[2]
         lower_bound = float(src_df[column].min())
         upper_bound = float(src_df[column].max())
-        src_df[column] = src_df[column].apply(lambda x: (x - lower_bound) / (upper_bound - lower_bound))
+        if upper_bound == lower_bound:
+            src_df[column] = 0
+        else:
+            src_df[column] = src_df[column].apply(lambda x: (x - lower_bound) / (upper_bound - lower_bound))
 
         return src_df
 
@@ -136,12 +141,16 @@ class Analyser(Thread):
             req = Requester()
             res = req.get(url)
             api_result = json.loads(res.content)
-            if api_result['status'] != 'OK':
-                continue
-            location_types = api_result['results'][0]['address_components'][0]['types']
-            if not isinstance(location_types, list) or len(location_types) == 0:
-                continue
-            location_score = max(self.__measure_location_ambiguity(location_type) for location_type in location_types)
+            if api_result['status'] == 'ZERO_RESULTS':
+                location_score = 0
+            else:
+                if api_result['status'] != 'OK':
+                    raise RuntimeError('{}: {}'.format(api_result['status'], api_result['error_message']))
+                location_types = api_result['results'][0]['address_components'][0]['types']
+                if not isinstance(location_types, list) or len(location_types) == 0:
+                    continue
+                location_score = max(
+                    self.__measure_location_ambiguity(location_type) for location_type in location_types)
             location_index = location_se[location_se == location_name].index[0]
             df.set_value(location_index, 'ambiguity', location_score)
         return df
@@ -289,6 +298,9 @@ class Analyser(Thread):
         return df
 
     def _compute_tf_idf_queries(self, text, total_word, total_doc, no_docterm):
+        # in case, the source does not return the exact match, no docs were found
+        if no_docterm == 0:
+            no_docterm = 1
         tf = self._compute_tf_queries(text, total_word)
         idf = self._compute_idf_queries(total_doc, no_docterm)
         return tf * idf
@@ -340,7 +352,7 @@ class Analyser(Thread):
 
 
 if __name__ == '__main__':
-    a = Analyser('/Users/Sinderella/PycharmProjects/OSINT/db/20160221_124023')
+    a = Analyser('/Users/Sinderella/PycharmProjects/OSINT/db/20160229_014726')
     # plt.matplotlib.style.use('ggplot')
     a.start()
     a.join()
