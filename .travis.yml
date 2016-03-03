@@ -4,6 +4,10 @@ python:
 addons:
   apt:
     packages:
+      - libblas-dev
+      - liblapack-dev
+      - libatlas-base-dev
+      - gfortran
       - python-numpy
       - python-scipy
       - python-matplotli
@@ -15,8 +19,8 @@ addons:
 before_install:
   - pip install -U pip
 install:
-  - travis_wait pip install -r requirements.txt
-  - travis_retry python setup.py install
+  - pip install -r requirements.txt
+  - python setup.py install
 script:
   - python setup.py build
   - nosetests
