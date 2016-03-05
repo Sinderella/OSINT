@@ -127,6 +127,43 @@ class Console(cmd.Cmd):
 
         return line
 
+    def do_url(self, params):
+        """url [entity]
+        Get the source(s) of the retrieved entity
+        ---
+        entity - The entity that will be traced back to the URL
+        """
+        argc, argv = param_parser(params)
+
+        if argc == 1:
+            entity = argv[0]
+        elif argc > 1:
+            entity = ' '.join(argv[0:])
+        else:
+            self.do_help('url')
+            return
+
+        if self.cur_db_name is None:
+            print("[!] Database is not loaded")
+            return
+
+        self.cur_db = sqlite3.connect(self.cur_db_name + '/documents.db')
+        self.cur_db_cursor = self.cur_db.cursor()
+
+        query = 'SELECT documents.url FROM documents WHERE documents.did IN ' \
+                '(SELECT DISTINCT entities.did FROM entities WHERE entities.entity LIKE \'%{0}%\')'
+        self.cur_db_cursor.execute(query.format(entity))
+
+        loaded_rows = self.cur_db_cursor.fetchall()
+        if len(loaded_rows) == 0:
+            print("Entity: {} is not found in the database".format(entity))
+            return
+
+        urls = [row[0] for row in loaded_rows]
+        print("Entity: {} is retrieved from:".format(entity))
+        for url in urls:
+            print("\t{}".format(url))
+
     def do_run(self, params):
         """run
         Gather information from different sources using supplied information.
@@ -156,53 +193,6 @@ class Console(cmd.Cmd):
         scraper.start()
 
         return scraper
-
-        # if 'EMAIL' in self.params:
-        #     if ',' in self.params['EMAIL']:
-        #         emails = self.params['EMAIL'].split[',']
-        #     else:
-        #         emails = [self.params['EMAIL']]
-        #     for email in emails:
-        #         results = self.mgr.map(filter_func, query_source, 'google', "\"" + email + "\"")
-        #         self.queries.append(email)
-        #         for result in results:
-        #             [scraper.put(url) for url in result.result['urls']]
-                    # [self.url_queue.put(url) for url in result.result['urls']]
-                    # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + email + "\"")
-                    # for result in results:
-                    #     [self.queue.put(url) for url in result.result['urls']]
-
-                    # persons = self.mgr.map(filter_func, query_source, 'pipl', "email={}".format(self.params['EMAIL']))
-                    #
-                    # for person in persons:
-                    #     self.result.add_person(person)
-
-        # if 'FIRST_NAME' in self.params and 'LAST_NAME' in self.params:
-        #     full_name = self.params['FIRST_NAME'] + ' ' + self.params['LAST_NAME']
-        #     results = self.mgr.map(filter_func, query_source, 'google', "\"" + full_name + "\"")
-        #     self.queries.append(full_name)
-        #     for result in results:
-        #         [scraper.put(url) for url in result.result['urls']]
-                # [self.url_queue.put(url) for url in result.result['urls']]
-                # results = self.mgr.map(filter_func, query_source, 'bing', "\"" + full_name + "\"")
-                # for result in results:
-                #     [self.queue.put(url) for url in result.result['urls']]
-                # persons = self.mgr.map(filter_func, query_source, 'pipl',
-                #                        "first_name={}&last_name={}".format(self.params['FIRST_NAME'],
-                #                                                            self.params['LAST_NAME']))
-                # for person in persons:
-                #     self.result.add_person(person)
-
-                # self.queue.join()
-                # print(self.result)
-                # for key in self.result:
-                #     print(Fore.YELLOW + '{}: '.format(key) + Fore.RESET)
-                #     if isinstance(self.result[key], set) or isinstance(self.result[key], list):
-                #         for url in self.result[key]:
-                #             print('\t{}'.format(url))
-                #     else:
-                #         print('{}'.format(self.result[key]))
-                # print(Fore.CYAN + '=' * 100 + Fore.RESET)
 
     def do_pause(self, params):
         """pause
