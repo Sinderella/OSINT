@@ -35,12 +35,10 @@ class ProcessBase(Thread):
         if not self.added:
             return
         self._update_progress()
-        # TODO: bug
         Timer(120, self.timer).start()
 
     def put(self, item):
-        if not self.added:
-            self.timer()
+        self.timer()
         self.queue.put(item)
         self.added = True
 
