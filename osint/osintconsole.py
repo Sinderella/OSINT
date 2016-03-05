@@ -5,17 +5,15 @@ import cmd
 import codecs
 import datetime
 import errno
-import operator
 import os
 import sqlite3
-from threading import Lock, Semaphore
+from urllib import unquote
+from threading import Lock
 
 from stevedore import dispatch
 
-from osint.models.person import Person
 from osint.utils.analyser import Analyser
 from osint.utils.db_helpers import insert_keyword
-from osint.utils.queues import WorkerQueue
 from osint.utils.threads import Scraper, Extractor
 from utils.parsers import param_parser
 
@@ -162,12 +160,15 @@ class Console(cmd.Cmd):
         urls = [row[0] for row in loaded_rows]
         print("Entity: {} is retrieved from:".format(entity))
         for url in urls:
+            if '%3A' in url:
+                url = unquote(url).decode('utf8')
             print("\t{}".format(url))
 
     def do_run(self, params):
         """run
         Gather information from different sources using supplied information.
         """
+
         def filter_func(ext, extension_name, *args, **kwargs):
             return ext.name == extension_name
 
