@@ -28,7 +28,8 @@ class Console(cmd.Cmd):
             lambda *args, **kwds: True,
             invoke_on_load=True,
         )
-        self.intro = "Loaded " + str(len(self.mgr.extensions)) + " modules"
+        self.intro_msg = "Loaded " + str(len(self.mgr.extensions)) + " modules"
+        print(self.intro_msg)
         self.prompt = "osint$ "
 
         self.INPUT_PARAMS = ['Name', 'Email', 'Phone', 'Image', 'URL', 'Education', 'Job', 'User ID', 'Organisation',
@@ -98,7 +99,7 @@ class Console(cmd.Cmd):
             lambda *args, **kwds: True,
             invoke_on_load=True,
         )
-        print(self.intro)
+        print(self.intro_msg)
 
     def precmd(self, line):
         if self.cur_db_name:
@@ -140,7 +141,6 @@ class Console(cmd.Cmd):
 
         print("[*] Started scraping websites...")
         scraper = Scraper(self.cur_db_name, self.lock)
-        scraper.start()
 
         # TODO: build queries based on input, permute through all inputs with full name
         cur_db_cursor = self.cur_db.cursor()
@@ -152,6 +152,8 @@ class Console(cmd.Cmd):
                 self.queries.append(keyword)
                 for result in results:
                     [scraper.put(url) for url in result.result['urls']]
+
+        scraper.start()
 
         return scraper
 

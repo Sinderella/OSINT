@@ -27,22 +27,22 @@ class ProcessBase(Thread):
         self.queue = WorkerQueue()
         self.start_time = time.time()
         self.added = False
-        self.pause = False
+        self.running = False
+        self.completed = False
         self.item_type = item_type
         self.lock = lock
 
     def timer(self):
-        if not self.added:
-            return
-        self._update_progress()
-        Timer(120, self.timer).start()
+        if not self.completed:
+            self._update_progress()
+            Timer(60, self.timer).start()
 
     def put(self, item):
-        self.timer()
         self.queue.put(item)
-        self.added = True
 
     def _update_progress(self):
+        if not self.running:
+            return
         done_url = self.queue.get_done()
         total_url = self.queue.get_total()
         total_percentage = done_url * 100.0 / total_url
@@ -59,14 +59,18 @@ class Scraper(ProcessBase):
     def run(self):
         self.cur_db = sqlite3.connect(self.db_name + '/documents.db')
         while True:
-            self.lock.acquire()
+            self.running = self.lock.acquire()
             url = self.queue.get()
+            if not self.added:
+                self.timer()
+                self.added = True
             self.save_html(url)
+            self.running = False
             self.lock.release()
             self.queue.task_done()
             if self.queue.empty():
                 # Kill the timer
-                self.added = False
+                self.completed = True
                 end_time = time.time()
                 hours, rem = divmod(end_time - self.start_time, 3600)
                 minutes, seconds = divmod(rem, 60)
@@ -114,14 +118,18 @@ class Extractor(ProcessBase):
     def run(self):
         self.cur_db = sqlite3.connect(self.db_name + '/documents.db')
         while True:
-            self.lock.acquire()
+            self.running = self.lock.acquire()
             document_id, path_to_html = self.queue.get()
+            if not self.added:
+                self.timer()
+                self.added = True
             self.extract_insert_info(document_id, path_to_html)
+            self.running = False
             self.lock.release()
             self.queue.task_done()
             if self.queue.empty():
                 # Kill the timer
-                self.added = False
+                self.completed = False
                 end_time = time.time()
                 hours, rem = divmod(end_time - self.start_time, 3600)
                 minutes, seconds = divmod(rem, 60)
