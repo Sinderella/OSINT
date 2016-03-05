@@ -32,15 +32,12 @@ class Console(cmd.Cmd):
         print(self.intro_msg)
         self.prompt = "osint$ "
 
-        self.INPUT_PARAMS = ['Name', 'Email', 'Phone', 'Image', 'URL', 'Education', 'Job', 'User ID', 'Organisation',
-                             'Location']
-        self.SHOW_PARAMS = ['params', 'options', 'info']
+        self.INPUT_PARAMS = ['Name', 'Email', 'Phone',
+                             'Location']  # 'Image', 'URL', 'Education', 'Job', 'User ID', 'Organisation', 'Location']
+        self.SHOW_PARAMS = ['params']
 
         self.queries = []
 
-        self.url_queue = WorkerQueue()
-        self.extract_queue = WorkerQueue()
-        self.result = Person()
         self.params = dict()
 
         self.cur_db_cursor = None
@@ -48,12 +45,6 @@ class Console(cmd.Cmd):
         self.cur_db = None
 
         self.lock = Lock()
-        self.sema = Semaphore(1)
-        self.running = False
-        self.url_timer_running = False
-        self.extract_timer_running = False
-
-        self.start_time = 0
 
     def extract_info(self):
         print("[*] Connecting to the database...")
@@ -82,6 +73,9 @@ class Console(cmd.Cmd):
         return analyser
 
     def do_analyse(self, params):
+        """analyse
+        Analyse the retrieved entities
+        """
         argc, argv = param_parser(params)
         if argc == 0:
             print("Please provide what you're looking for (e.g. name, location, ...)")
@@ -90,9 +84,15 @@ class Console(cmd.Cmd):
         return self.analyse(expected_types)
 
     def do_extract(self, params):
+        """extract
+        Extract information from the retrieved documents
+        """
         return self.extract_info()
 
     def do_reload(self, params):
+        """reload
+        Reload new modules as plugins
+        """
         del self.mgr
         self.mgr = dispatch.DispatchExtensionManager(
             'osint.plugins.source',
@@ -168,7 +168,6 @@ class Console(cmd.Cmd):
         """run
         Gather information from different sources using supplied information.
         """
-
         def filter_func(ext, extension_name, *args, **kwargs):
             return ext.name == extension_name
 
@@ -210,10 +209,10 @@ class Console(cmd.Cmd):
         """set [param] [value]
         Set the searching parameter with the input value.
         ---
-        FIRST_NAME - First name of the profile
-        LAST_NAME - Last name of the profile
-        EMAIL - Emails of the profile (e.g. name@domain.com, or ['name@domain.com', 'name2@domain.com']
-        FACEBOOK - Facebook username or profile id (e.g. /zuck, or id=111111)
+        Name - First name of the profile
+        Email - Emails of the profile (e.g. name@domain.com, or ['name@domain.com', 'name2@domain.com']
+        Phone - Phone number
+        Location - Name of the location
         """
         argc, argv = param_parser(params)
         #
@@ -254,8 +253,6 @@ class Console(cmd.Cmd):
             return
         return {
             'params': self.__show_params,
-            'options': self.__show_options,
-            'info': self.__show_info,
         }.get(argv[0])()
 
     def complete_show(self, text, *args):
@@ -307,26 +304,13 @@ class Console(cmd.Cmd):
             print('\t{}\t{}'.format(row[1], row[0]))
 
     def __show_params(self):
-        print('Name: {} {}'.format(self.params.get('FIRST_NAME', ''), self.params.get('LAST_NAME', '')))
-        print('Email: {}'.format(self.params.get('EMAIL', '')))
-        print('Facebook: {}'.format(self.params.get('FACEBOOK', '')))
-        print('Linkedin: {}'.format(self.params.get('LINKEDIN', '')))
+        for key in self.params:
+            print('{0}: {1}'.format(key.title(), self.params[key]))
         print('')
 
-    def __show_options(self):
-        pass
-
-    def __show_info(self):
-        print(self.result)
-        # for key in self.result:
-        #     print('{}:'.format(key))
-        #     if isinstance(self.result[key], set):
-        #         for item in list(self.result[key]):
-        #             print('\t{}'.format(item))
-        #     else:
-        #         print('\t{}'.format(self.result[key]))
-
     def do_EOF(self, line):
+        """EOF
+        """
         return True
 
     def postloop(self):
