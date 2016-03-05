@@ -52,6 +52,8 @@ class Analyser(Thread):
         else:
             self.queries = list(set(self.queries + queries))
 
+        print('[+] Analysing queries: {0}'.format(', '.join(self.queries)))
+
         # frequency_df = self.compute_frequency()
         consistency_df = self.compute_consistency()
         tf_idf_queries_df = self.compute_tf_idf_queries()
