@@ -153,7 +153,7 @@ class Console(cmd.Cmd):
         self.cur_db_cursor.execute(query.format(entity))
 
         loaded_rows = self.cur_db_cursor.fetchall()
-        if len(loaded_rows) == 0:
+        if len(loaded_rows):
             print("Entity: {} is not found in the database".format(entity))
             return
 
