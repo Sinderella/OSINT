@@ -1,10 +1,11 @@
 language: python
 python:
   - "2.7"
+jdk:
+  - oraclejdk8
 addons:
   apt:
     packages:
-      - oracle-java8-installer
       - libblas-dev
       - liblapack-dev
       - libatlas-base-dev
