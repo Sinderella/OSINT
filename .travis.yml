@@ -4,7 +4,7 @@ python:
 addons:
   apt:
     packages:
-      - openjdk-8-jdk
+      - oracle-java8-installer
       - libblas-dev
       - liblapack-dev
       - libatlas-base-dev
