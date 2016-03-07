@@ -19,7 +19,7 @@ addons:
       - python-nose
 before_install:
 #  - jdk_switcher use oraclejdk8
-  - update-java-alternatives --set java-8-oracle
+  - sudo update-java-alternatives --set java-8-oracle
   - pip install -U pip
 install:
   - pip install -r requirements.txt
