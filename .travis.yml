@@ -28,5 +28,6 @@ install:
   - pip install -r requirements.txt
   - python setup.py install
 script:
+  - jdk_switcher use oraclejdk8
   - python setup.py build
   - nosetests
