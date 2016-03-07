@@ -1,6 +1,8 @@
 language: python
 python:
   - "2.7"
+jdk:
+  - oraclejdk8
 sudo: false
 cache: pip
 addons:
@@ -9,7 +11,7 @@ addons:
       - deadsnakes
       - ubuntu-toolchain-r-test
     packages:
-      - oracle-java8-set-default
+      - oracle-java8-installer
       - libblas-dev
       - liblapack-dev
       - libatlas-base-dev
