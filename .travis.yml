@@ -9,16 +9,16 @@ addons:
       - deadsnakes
       - ubuntu-toolchain-r-test
     packages:
-      - openjdk-8-jdk
+      - oracle-java8-installer
       - libblas-dev
       - liblapack-dev
       - libatlas-base-dev
       - gfortran
       - python-numpy
       - python-scipy
-      - python-matplotli
-      - ipytho
-      - ipython-noteboo
+      - python-matplotlib
+      - ipython
+      - ipython-notebook
       - python-panda
       - python-symp
       - python-nose
