@@ -9,7 +9,7 @@ addons:
       - deadsnakes
       - ubuntu-toolchain-r-test
     packages:
-      - oracle-java8-installer
+      - oracle-java8-set-default
       - libblas-dev
       - liblapack-dev
       - libatlas-base-dev
