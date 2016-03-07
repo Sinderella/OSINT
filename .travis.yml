@@ -5,7 +5,11 @@ sudo: false
 cache: pip
 addons:
   apt:
+    sources:
+      - deadsnakes
+      - ubuntu-toolchain-r-test
     packages:
+      - openjdk-8-jdk
       - libblas-dev
       - liblapack-dev
       - libatlas-base-dev
