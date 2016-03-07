@@ -25,11 +25,12 @@ addons:
       - python-symp
       - python-nose
 before_install:
-  - ./switch_java.sh
   - pip install -U pip
 install:
   - pip install -r requirements.txt
   - python setup.py install
 script:
   - python setup.py build
+  - export JAVA_HOME=/usr/lib/jvm/java-8-oracle
+  - export PATH=/usr/lib/jvm/java-8-oracle/jre/bin/:$PATH
   - nosetests
