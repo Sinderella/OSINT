@@ -1,8 +1,6 @@
 language: python
 python:
   - "2.7"
-jdk:
-  - oraclejdk8
 addons:
   apt:
     packages:
@@ -19,6 +17,7 @@ addons:
       - python-symp
       - python-nose
 before_install:
+  - java install oraclejdk8
   - pip install -U pip
 install:
   - pip install -r requirements.txt
