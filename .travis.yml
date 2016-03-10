@@ -19,10 +19,6 @@ addons:
       - python-numpy
       - python-scipy
       - python-matplotlib
-      - ipython
-      - ipython-notebook
-      - python-panda
-      - python-symp
       - python-nose
 before_install:
   - pip install -U pip
