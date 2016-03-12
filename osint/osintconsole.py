@@ -241,20 +241,18 @@ class Console(cmd.Cmd):
         return completions
 
     def do_show(self, params):
-        """show [<params|options|info>]
+        """show [params]
         Display information of the parameter
         ---
         params - parameters
-        options - option
-        info - complete information of the profile
         """
         argc, argv = param_parser(params)
-        if argc != 1:
+        if argc == 1 and argv[0] in self.SHOW_PARAMS:
+            return {
+                'params': self.__show_params,
+            }.get(argv[0])()
+        else:
             self.do_help('show')
-            return
-        return {
-            'params': self.__show_params,
-        }.get(argv[0])()
 
     def complete_show(self, text, *args):
         if not text:
@@ -305,6 +303,7 @@ class Console(cmd.Cmd):
             print('\t{}\t{}'.format(row[1], row[0]))
 
     def __show_params(self):
+        print('Current DB: {0}'.format(self.cur_db_name))
         for key in self.params:
             print('{0}: {1}'.format(key.title(), self.params[key]))
         print('')
