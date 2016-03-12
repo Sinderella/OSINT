@@ -7,8 +7,9 @@ import datetime
 import errno
 import os
 import sqlite3
-from urllib import unquote
+from subprocess import call
 from threading import Lock
+from urllib import unquote
 
 from stevedore import dispatch
 
@@ -43,6 +44,9 @@ class Console(cmd.Cmd):
         self.cur_db = None
 
         self.lock = Lock()
+
+    def do_shell(self, line):
+        call(line.split(' '))
 
     def extract_info(self):
         print("[*] Connecting to the database...")
