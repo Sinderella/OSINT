@@ -46,6 +46,9 @@ class Console(cmd.Cmd):
         self.lock = Lock()
 
     def do_shell(self, line):
+        """!<command> <arg1> <arg2>
+        executing shell command
+        """
         call(line.split(' '))
 
     def extract_info(self):
